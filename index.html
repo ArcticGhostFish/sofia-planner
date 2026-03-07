@@ -1,0 +1,582 @@
+<!DOCTYPE html>
+<html lang="sv">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Sofia's Life Planner 🐚</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,600;1,400&family=Lora:ital,wght@0,400;0,500;1,400&family=Source+Sans+3:wght@300;400;600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<div id="app" style="display:flex;width:100%;height:100vh;overflow:hidden">
+
+<!-- ===== SIDEBAR ===== -->
+<nav id="sidebar">
+  <div class="sb-profile" onclick="triggerProfilePhoto()">
+    <div class="sb-photo" id="sb-photo-container">
+      <span class="sb-photo-placeholder">🐚</span>
+    </div>
+    <div class="sb-info">
+      <div class="sb-name">Sofia Merdovic</div>
+      <div class="sb-sub">Life Planner</div>
+    </div>
+  </div>
+
+  <div class="sb-nav">
+    <div class="sb-section">
+      <div class="sb-item active" data-view="home"><span class="sb-icon">🏠</span> Hem</div>
+      <div class="sb-item" data-view="journal"><span class="sb-icon">📔</span> Journal</div>
+      <div class="sb-item" data-view="habits"><span class="sb-icon">✓</span> Habits</div>
+      <div class="sb-item" data-view="budget"><span class="sb-icon">💰</span> Budget</div>
+      <div class="sb-item" data-view="study"><span class="sb-icon">📚</span> Study Hub</div>
+      <div class="sb-item" data-view="notes"><span class="sb-icon">📝</span> Notes</div>
+      <div class="sb-item" data-view="planner"><span class="sb-icon">📅</span> Life Planner</div>
+    </div>
+    <div class="sb-section">
+      <div class="sb-label">Senaste anteckningar</div>
+      <div id="sb-recent-notes"></div>
+    </div>
+    <div class="sb-section">
+      <div class="sb-label">Privat</div>
+      <div class="sb-item" data-view="journal"><span class="sb-icon">📖</span> Historik-Journal</div>
+      <div class="sb-item" data-view="home"><span class="sb-icon">🖼</span> Scrapbook</div>
+    </div>
+  </div>
+
+  <div class="sb-footer">
+    <div id="sb-date"></div>
+    <button class="sb-gcal-btn" id="sb-gcal-btn" onclick="toggleGCal()">📅 Google Cal</button>
+  </div>
+</nav>
+
+<!-- ===== MAIN ===== -->
+<main id="main">
+
+<!-- ────────────────── HOME ────────────────── -->
+<div class="view active" id="view-home">
+  <div class="view-hero h-water">
+    <div class="hero-overlay">
+      <div class="hero-content">
+        <div class="hero-profile" id="hero-profile" onclick="triggerProfilePhoto()">
+          <span>🐚</span>
+        </div>
+        <div>
+          <h1 class="hero-title">Sofia's Life Planner</h1>
+          <div class="hero-date" id="hero-date"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="view-content">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:18px">
+      <h2 class="view-title" style="margin-bottom:0">Dashboard</h2>
+      <button class="btn-secondary" onclick="toggleEditMode()">✦ Customize</button>
+    </div>
+    <div id="widget-grid" class="widget-grid"></div>
+
+    <div class="section-header" style="margin-top:28px">
+      ✨ Scrapbook
+      <button class="btn-link" onclick="addScrap()">+ Add Photo</button>
+    </div>
+    <div class="scrapbook-grid" id="scrapbook-main"></div>
+  </div>
+</div>
+
+<!-- ────────────────── JOURNAL ────────────────── -->
+<div class="view" id="view-journal">
+  <div class="view-hero h-diary">
+    <div class="page-icon">📓</div>
+  </div>
+  <div class="view-content">
+    <h2 class="view-title">Journal</h2>
+    <div class="pmeta">Personal diary · <span id="journal-date-label"></span></div>
+
+    <div class="journal-tabs">
+      <button class="jtab active" onclick="setJTab('morning', this)">☀️ Morning</button>
+      <button class="jtab" onclick="setJTab('night', this)">🌙 Night</button>
+      <button class="jtab" onclick="setJTab('thought', this)">💭 Thought</button>
+    </div>
+
+    <!-- Morning -->
+    <div class="journal-panel active" id="jpanel-morning">
+      <div class="journal-prompt">Good morning! How are you feeling? What are your intentions for today?</div>
+      <div class="mood-row">
+        <span style="font-size:12px;color:var(--tl)">Mood:</span>
+        <div class="mood-emojis" id="morning-mood">
+          <span class="mood-e" onclick="setMood('morning','😊')">😊</span>
+          <span class="mood-e" onclick="setMood('morning','😌')">😌</span>
+          <span class="mood-e" onclick="setMood('morning','😩')">😩</span>
+          <span class="mood-e" onclick="setMood('morning','😴')">😴</span>
+          <span class="mood-e" onclick="setMood('morning','🥰')">🥰</span>
+          <span class="mood-e" onclick="setMood('morning','😤')">😤</span>
+          <span class="mood-e" onclick="setMood('morning','😭')">😭</span>
+          <span class="mood-e" onclick="setMood('morning','🤩')">🤩</span>
+        </div>
+      </div>
+      <textarea class="journal-ta" id="morning-ta" placeholder="Write your morning thoughts..."></textarea>
+      <button class="btn-primary" onclick="saveJournalEntry('morning')">Save entry</button>
+    </div>
+
+    <!-- Night -->
+    <div class="journal-panel" id="jpanel-night">
+      <div class="journal-prompt">How was your day? Reflect and wind down.</div>
+      <div class="mood-row">
+        <span style="font-size:12px;color:var(--tl)">Mood:</span>
+        <div class="mood-emojis" id="night-mood">
+          <span class="mood-e" onclick="setMood('night','😊')">😊</span>
+          <span class="mood-e" onclick="setMood('night','😌')">😌</span>
+          <span class="mood-e" onclick="setMood('night','😩')">😩</span>
+          <span class="mood-e" onclick="setMood('night','😴')">😴</span>
+          <span class="mood-e" onclick="setMood('night','🥰')">🥰</span>
+          <span class="mood-e" onclick="setMood('night','😤')">😤</span>
+          <span class="mood-e" onclick="setMood('night','😭')">😭</span>
+          <span class="mood-e" onclick="setMood('night','🤩')">🤩</span>
+        </div>
+      </div>
+      <textarea class="journal-ta" id="night-ta" placeholder="Reflect on your day..."></textarea>
+      <div class="grateful-section">
+        <label>✨ Grateful for today</label>
+        <textarea class="journal-ta" id="night-grateful" placeholder="I'm grateful for..." style="min-height:70px"></textarea>
+      </div>
+      <button class="btn-primary" onclick="saveJournalEntry('night')">Save entry</button>
+    </div>
+
+    <!-- Thought -->
+    <div class="journal-panel" id="jpanel-thought">
+      <div class="journal-prompt">Quick thought, idea, or reminder.</div>
+      <textarea class="journal-ta" id="thought-ta" placeholder="Quick thought..."></textarea>
+      <button class="btn-primary" onclick="saveJournalEntry('thought')">Save thought</button>
+    </div>
+
+    <div class="section-header" style="margin-top:24px">
+      Past Entries
+      <button class="btn-link" onclick="openModal('m-diary')">+ New Full Entry</button>
+    </div>
+    <div id="diary-list"></div>
+  </div>
+</div>
+
+<!-- ────────────────── DIARY ENTRY (full edit) ────────────────── -->
+<div class="view" id="view-diary-entry">
+  <div class="view-hero h-diary"><div class="page-icon">🌙</div></div>
+  <div class="view-content">
+    <button class="back-btn" onclick="nav('journal')">← Journal</button>
+    <div class="view-title" id="de-title" contenteditable="true" style="outline:none;margin-bottom:10px">Entry</div>
+    <div class="cornell-meta">
+      <div class="meta-chip">📅 <input type="date" id="de-date"/></div>
+      <div class="meta-chip">💭 <select id="de-type"><option value="morning">Morning</option><option value="night">Night</option><option value="thought">Thought</option></select></div>
+      <div class="meta-chip">😊 <input type="text" id="de-mood-sel" placeholder="mood emoji" style="width:60px"/></div>
+    </div>
+    <div style="margin-bottom:10px">
+      <div class="cornell-label">📝 Thoughts</div>
+      <textarea class="journal-ta" id="de-content" style="min-height:220px" placeholder="Dear diary..."></textarea>
+    </div>
+    <div>
+      <div class="cornell-label">✨ Grateful for today</div>
+      <textarea class="journal-ta" id="de-grateful" style="min-height:70px" placeholder="I'm grateful for..."></textarea>
+    </div>
+    <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:14px">
+      <button class="btn-secondary" onclick="nav('journal')">Cancel</button>
+      <button class="btn-primary" onclick="saveDiaryEntry()">Save Entry ✓</button>
+    </div>
+  </div>
+</div>
+
+<!-- ────────────────── HABITS ────────────────── -->
+<div class="view" id="view-habits">
+  <div class="view-hero h-habits"><div class="page-icon">✓</div></div>
+  <div class="view-content">
+    <h2 class="view-title">Habits</h2>
+    <div class="pmeta" id="habits-week-lbl"></div>
+    <div class="section-header">
+      Weekly Tracker
+      <div style="display:flex;gap:6px;align-items:center">
+        <button class="btn-secondary" style="padding:3px 8px;font-size:11px" onclick="hWeek(-1)">‹</button>
+        <button class="btn-secondary" style="padding:3px 8px;font-size:11px" onclick="hWeek(1)">›</button>
+        <button class="btn-link" onclick="openModal('m-habit')">+ Add Habit</button>
+      </div>
+    </div>
+    <div class="card" style="margin-bottom:14px">
+      <div style="padding:0"><table class="habits-table" id="habits-tbl"></table></div>
+    </div>
+    <div class="progress-bar"><div class="progress-fill" id="hab-fill" style="width:0%"></div></div>
+    <div class="progress-label" id="hab-pct">0% this week</div>
+  </div>
+</div>
+
+<!-- ────────────────── BUDGET ────────────────── -->
+<div class="view" id="view-budget">
+  <div class="view-hero h-budget"><div class="page-icon">💰</div></div>
+  <div class="view-content">
+    <h2 class="view-title">Budget – Lön & Räkningar</h2>
+    <div class="pmeta">Mars 2026</div>
+    <div class="bud-stats">
+      <div class="bstat"><div class="bstat-label">Inkomst</div><div class="bstat-value income-color" id="bi-total">0 kr</div></div>
+      <div class="bstat"><div class="bstat-label">Utgifter</div><div class="bstat-value expense-color" id="be-total">0 kr</div></div>
+      <div class="bstat"><div class="bstat-label">Balans</div><div class="bstat-value balance-color" id="bb-total">0 kr</div></div>
+    </div>
+    <div class="section-header">
+      Alla poster
+      <button class="btn-link" onclick="openModal('m-budget')">+ Add Post</button>
+    </div>
+    <div class="card">
+      <div style="padding:0">
+        <table class="bud-table">
+          <thead><tr><th>Post</th><th>Belopp</th><th>Riktning</th><th>Kategori</th><th>Netto</th><th></th></tr></thead>
+          <tbody id="bud-tbody"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ────────────────── STUDY HUB ────────────────── -->
+<div class="view" id="view-study">
+  <div class="view-hero h-study"><div class="page-icon">📚</div></div>
+  <div class="view-content">
+    <h2 class="view-title">Study Hub</h2>
+    <div class="pmeta">Tools & resources for focused studying</div>
+    <div class="study-grid">
+      <!-- Pomodoro -->
+      <div class="card">
+        <div class="card-head">🍅 Pomodoro Timer</div>
+        <div class="pom-wrap">
+          <div class="pom-modes">
+            <button class="pom-mode-btn active" onclick="pomMode('work',25,this)">Focus 25m</button>
+            <button class="pom-mode-btn" onclick="pomMode('short',5,this)">Break 5m</button>
+            <button class="pom-mode-btn" onclick="pomMode('long',15,this)">Long 15m</button>
+          </div>
+          <div class="pom-ring-wrap">
+            <svg width="96" height="96" viewBox="0 0 96 96">
+              <circle cx="48" cy="48" r="40" fill="none" stroke="var(--border)" stroke-width="7"/>
+              <circle id="pom-arc" cx="48" cy="48" r="40" fill="none" stroke="var(--teal)" stroke-width="7"
+                stroke-dasharray="251.3" stroke-dashoffset="0" stroke-linecap="round"/>
+            </svg>
+            <div class="pom-ring-text" id="pom-pct">100%</div>
+          </div>
+          <div class="pom-display" id="pom-display">25:00</div>
+          <div class="pom-label" id="pom-label">Focus time</div>
+          <div class="pom-dots" id="pom-dots">
+            <div class="pom-dot"></div><div class="pom-dot"></div>
+            <div class="pom-dot"></div><div class="pom-dot"></div>
+          </div>
+          <div class="pom-btns">
+            <button class="btn-primary" id="pom-btn" onclick="pomToggle()">▶ Start</button>
+            <button class="btn-secondary" onclick="pomReset()">↺ Reset</button>
+          </div>
+          <div class="pom-stats">
+            <div class="pom-stat"><strong id="pom-ses">0</strong>Sessions today</div>
+            <div class="pom-stat"><strong id="pom-mins">0m</strong>Focused</div>
+          </div>
+        </div>
+      </div>
+      <!-- Study resources -->
+      <div class="card">
+        <div class="card-head">📎 Study Resources</div>
+        <div class="study-links">
+          <a href="https://otter.ai" target="_blank" class="study-link">
+            <span class="sl-icon">🎙️</span><div><div class="sl-name">Otter.ai</div><div class="sl-desc">Live transcription & meeting notes</div></div><span class="sl-arr">→</span>
+          </a>
+          <a href="https://notebooklm.google.com" target="_blank" class="study-link">
+            <span class="sl-icon">📖</span><div><div class="sl-name">Notebook LM</div><div class="sl-desc">AI-powered study notes by Google</div></div><span class="sl-arr">→</span>
+          </a>
+          <a href="https://ankiweb.net" target="_blank" class="study-link">
+            <span class="sl-icon">🃏</span><div><div class="sl-name">Anki Web</div><div class="sl-desc">Spaced repetition flashcards</div></div><span class="sl-arr">→</span>
+          </a>
+          <a href="https://claude.ai" target="_blank" class="study-link">
+            <span class="sl-icon">🤖</span><div><div class="sl-name">Claude AI</div><div class="sl-desc">Explain concepts, review notes</div></div><span class="sl-arr">→</span>
+          </a>
+          <a href="https://itslearning.com" target="_blank" class="study-link">
+            <span class="sl-icon">🎓</span><div><div class="sl-name">ITSLEARNING</div><div class="sl-desc">Course platform</div></div><span class="sl-arr">→</span>
+          </a>
+          <a href="https://www.khanacademy.org" target="_blank" class="study-link">
+            <span class="sl-icon">🧪</span><div><div class="sl-name">Khan Academy</div><div class="sl-desc">Free chemistry & biology courses</div></div><span class="sl-arr">→</span>
+          </a>
+        </div>
+      </div>
+    </div>
+    <div class="section-header">
+      📝 Class Notes
+      <button class="btn-link" onclick="openNewNote()">+ New Cornell Note</button>
+    </div>
+    <div class="card"><div class="card-body"><div id="study-notes-list"></div></div></div>
+  </div>
+</div>
+
+<!-- ────────────────── NOTES LIST ────────────────── -->
+<div class="view" id="view-notes">
+  <div class="view-hero h-water"><div class="page-icon">📝</div></div>
+  <div class="view-content">
+    <h2 class="view-title">Notes</h2>
+    <div class="pmeta">Cornell-style class notes</div>
+    <div class="section-header">
+      All Notes
+      <button class="btn-link" onclick="openNewNote()">+ New Note</button>
+    </div>
+    <div class="notes-grid" id="notes-grid"></div>
+  </div>
+</div>
+
+<!-- ────────────────── CORNELL EDITOR ────────────────── -->
+<div class="view" id="view-note">
+  <div class="view-hero h-water"><div class="page-icon">📝</div></div>
+  <div class="view-content">
+    <div style="display:flex;align-items:center;gap:10px;margin-bottom:6px">
+      <button class="back-btn" onclick="nav('notes')">← Notes</button>
+      <span class="note-tag-badge" id="note-tag">Class</span>
+    </div>
+    <div class="view-title" id="note-title" contenteditable="true" style="outline:none;margin-bottom:12px">Untitled Note</div>
+    <div class="cornell-meta">
+      <div class="meta-chip">📅 <input type="date" id="note-date"/></div>
+      <div class="meta-chip">📚 <input type="text" id="note-class" placeholder="Subject..." style="width:110px"/></div>
+      <div class="meta-chip">✨ <select id="note-mood"><option>✨</option><option>🧠 focused</option><option>😴 tired</option><option>⚡ excited</option><option>😌 calm</option></select></div>
+    </div>
+    <div style="display:grid;grid-template-columns:160px 1fr;font-size:9px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--tl);margin-bottom:4px">
+      <div>Cues / Keywords</div><div style="padding-left:14px">Notes</div>
+    </div>
+    <div class="cornell-body">
+      <div class="cornell-cues"><div class="cornell-label">🔑 Key Terms</div>
+        <textarea class="cornell-ta" id="note-cues" placeholder="• Keywords&#10;• Questions&#10;• Formulas"></textarea></div>
+      <div class="cornell-notes"><div class="cornell-label">📝 Main Notes</div>
+        <textarea class="cornell-ta" id="note-notes" placeholder="Write lecture notes here..."></textarea></div>
+      <div class="cornell-summary"><div class="cornell-label">💡 Summary</div>
+        <textarea class="cornell-ta sm" id="note-summary" placeholder="Key takeaways in your own words..."></textarea></div>
+    </div>
+    <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:14px">
+      <button class="btn-secondary" onclick="nav('notes')">Cancel</button>
+      <button class="btn-primary" onclick="saveNote()">Save Note ✓</button>
+    </div>
+  </div>
+</div>
+
+<!-- ────────────────── LIFE PLANNER ────────────────── -->
+<div class="view" id="view-planner">
+  <div class="view-hero h-life"><div class="page-icon">📅</div></div>
+  <div class="view-content">
+    <h2 class="view-title">Life Planner</h2>
+    <div class="pmeta">Monthly overview · Mars 2026</div>
+    <div class="planner-layout">
+      <!-- Calendar column -->
+      <div>
+        <div class="section-header" style="margin-bottom:10px">Monthly Planner</div>
+        <div class="card">
+          <div class="card-body">
+            <div class="cal-nav">
+              <button class="cal-nb" onclick="calPrev()">‹</button>
+              <div class="cal-title" id="cal-title-main">Mars 2026</div>
+              <button class="cal-nb" onclick="calNext()">›</button>
+            </div>
+            <div class="cal-grid" id="cal-grid-main"></div>
+          </div>
+        </div>
+        <div class="section-header" style="margin-top:16px;margin-bottom:10px">Quick Links</div>
+        <div class="card">
+          <div class="card-body" style="padding:8px 10px;display:flex;flex-direction:column;gap:2px">
+            <a href="https://itslearning.com" target="_blank" style="font-size:13px;color:var(--teal-d);padding:5px 0;display:block;text-decoration:none">🎓 ITSLEARNING</a>
+            <a href="https://mail.google.com" target="_blank" style="font-size:13px;color:var(--teal-d);padding:5px 0;display:block;text-decoration:none">📧 E-mail</a>
+            <a href="https://notebooklm.google.com" target="_blank" style="font-size:13px;color:var(--teal-d);padding:5px 0;display:block;text-decoration:none">📖 Notebook LM</a>
+          </div>
+        </div>
+      </div>
+      <!-- Schedule column -->
+      <div>
+        <div class="section-header" style="margin-bottom:10px">Class Schedule · <em>Mars</em></div>
+        <div class="card">
+          <div style="padding:0">
+            <table class="sched">
+              <tr><th>V</th><th>Mån</th><th>Tis</th><th>Ons</th><th>Tor</th><th>Fre</th></tr>
+              <tr><td class="week-num">V6</td><td>9.2<span class="class-pill">13–14 Träff 1</span><span class="class-pill">Weekcomm M</span></td><td>10.2<span class="class-pill">10–12 Pluggstuga</span></td><td>11.2<span class="class-pill">13–14 Pluggstuga</span></td><td>12.2</td><td>13.2<span class="class-pill">10–11 Pluggstuga</span></td></tr>
+              <tr><td class="week-num">V7</td><td>16.2<span class="class-pill">10–11 Pluggstuga</span></td><td>17.2<span class="class-pill">10–12 Pluggstuga</span></td><td>18.2<span class="class-pill">10–12 Pluggstuga</span><span class="class-pill">Träff 4 Arbetslivet</span></td><td>19.2</td><td>20.2<span class="class-pill">10–11 Pluggstuga</span></td></tr>
+              <tr><td class="week-num">V8</td><td>23.2</td><td>24.2<span class="class-pill">13–15 Träff 6</span></td><td>25.2<span class="class-pill">13–15 Profession</span></td><td>26.2</td><td>27.2<span class="class-pill">10–11 Pluggstuga</span></td></tr>
+              <tr><td class="week-num">V9</td><td>2.3</td><td>3.3</td><td>4.3</td><td>5.3</td><td>6.3</td></tr>
+            </table>
+          </div>
+        </div>
+      </div>
+      <!-- Right column -->
+      <div>
+        <div class="section-header" style="margin-bottom:10px">Google Calendar</div>
+        <div class="card">
+          <div class="card-body" id="gcal-events" style="min-height:80px">
+            <div class="gcal-widget-empty">Not connected. Click "Google Cal" in sidebar to set up.</div>
+          </div>
+        </div>
+        <div class="section-header" style="margin-top:16px;margin-bottom:10px">Budget Snapshot</div>
+        <div class="card" id="planner-bud-snap">
+          <div class="card-body" style="font-size:13px;color:var(--tl)">Loading...</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+</main><!-- end #main -->
+</div><!-- end #app -->
+
+<!-- ===== RADIO PLAYER ===== -->
+<button id="radio-fab" title="Radio">🎵</button>
+<div id="radio-player">
+  <div class="radio-stations" id="radio-stations"></div>
+  <div class="radio-controls">
+    <button class="radio-btn" id="radio-btn" onclick="radioToggle()">▶</button>
+    <div class="radio-info">
+      <div class="radio-name" id="radio-name">Radio</div>
+      <div class="radio-stream" id="radio-stream">Select a station</div>
+    </div>
+    <input type="range" class="radio-vol" id="radio-vol" min="0" max="1" step="0.05" value="0.7" title="Volume">
+    <button class="radio-close" onclick="toggleRadio()">✕</button>
+  </div>
+  <audio id="radio-audio" preload="none"></audio>
+</div>
+
+<!-- ===== MODALS ===== -->
+
+<!-- New Cornell Note -->
+<div class="modal-bg" id="m-note">
+  <div class="modal">
+    <div class="modal-head"><div class="modal-title">New Cornell Note</div><button class="modal-close" onclick="closeModal('m-note')">✕</button></div>
+    <div class="modal-body">
+      <div class="field"><label>Title</label><input class="fi" id="mn-title" placeholder="Lecture 5 – Alkenes"/></div>
+      <div class="field-row">
+        <div class="field"><label>Subject</label><input class="fi" id="mn-class" placeholder="OOrganisk kemi"/></div>
+        <div class="field"><label>Date</label><input type="date" id="mn-date"/></div>
+      </div>
+    </div>
+    <div class="modal-foot">
+      <button class="btn-secondary" onclick="closeModal('m-note')">Cancel</button>
+      <button class="btn-primary" onclick="createNote()">Create →</button>
+    </div>
+  </div>
+</div>
+
+<!-- New Journal Entry -->
+<div class="modal-bg" id="m-diary">
+  <div class="modal">
+    <div class="modal-head"><div class="modal-title">New Journal Entry</div><button class="modal-close" onclick="closeModal('m-diary')">✕</button></div>
+    <div class="modal-body">
+      <div class="field"><label>Title</label><input class="fi" id="md-title" placeholder="What's on your mind?"/></div>
+      <div class="field"><label>Type</label>
+        <select class="fi" id="md-type">
+          <option value="morning">☀️ Morning</option>
+          <option value="night">🌙 Night</option>
+          <option value="thought">💭 Thought</option>
+        </select>
+      </div>
+    </div>
+    <div class="modal-foot">
+      <button class="btn-secondary" onclick="closeModal('m-diary')">Cancel</button>
+      <button class="btn-primary" onclick="createDiaryEntry()">Open Entry →</button>
+    </div>
+  </div>
+</div>
+
+<!-- Add Habit -->
+<div class="modal-bg" id="m-habit">
+  <div class="modal">
+    <div class="modal-head"><div class="modal-title">Add Habit</div><button class="modal-close" onclick="closeModal('m-habit')">✕</button></div>
+    <div class="modal-body">
+      <div class="field"><label>Habit Name</label><input class="fi" id="mh-name" placeholder="Drink Water"/></div>
+      <div class="field"><label>Emoji</label><input class="fi" id="mh-emoji" placeholder="🫗" style="width:80px"/></div>
+    </div>
+    <div class="modal-foot">
+      <button class="btn-secondary" onclick="closeModal('m-habit')">Cancel</button>
+      <button class="btn-primary" onclick="addHabit()">Add →</button>
+    </div>
+  </div>
+</div>
+
+<!-- Add Budget -->
+<div class="modal-bg" id="m-budget">
+  <div class="modal">
+    <div class="modal-head"><div class="modal-title">Add Budget Post</div><button class="modal-close" onclick="closeModal('m-budget')">✕</button></div>
+    <div class="modal-body">
+      <div class="field"><label>Post</label><input class="fi" id="mb-name" placeholder="Lön"/></div>
+      <div class="field-row">
+        <div class="field"><label>Belopp (kr)</label><input type="number" class="fi" id="mb-amount" placeholder="4574"/></div>
+        <div class="field"><label>Riktning</label>
+          <select class="fi" id="mb-dir">
+            <option value="income">Inkomst</option>
+            <option value="expense">Utgift</option>
+            <option value="saving">Sparande</option>
+          </select>
+        </div>
+      </div>
+      <div class="field"><label>Kategori</label><input class="fi" id="mb-cat" placeholder="Övrigt"/></div>
+    </div>
+    <div class="modal-foot">
+      <button class="btn-secondary" onclick="closeModal('m-budget')">Cancel</button>
+      <button class="btn-primary" onclick="addBudget()">Add →</button>
+    </div>
+  </div>
+</div>
+
+<!-- Google Calendar Setup -->
+<div class="modal-bg" id="m-gcal">
+  <div class="modal">
+    <div class="modal-head"><div class="modal-title">📅 Connect Google Calendar</div><button class="modal-close" onclick="closeModal('m-gcal')">✕</button></div>
+    <div class="modal-body">
+      <div class="gcal-setup">
+        <strong>One-time setup (~5 min)</strong>
+        <ol style="margin-top:8px">
+          <li>Go to <a href="https://console.cloud.google.com" target="_blank">console.cloud.google.com</a> → New project</li>
+          <li>Search <code>Google Calendar API</code> → Enable it</li>
+          <li>Credentials → Create Credentials → <strong>OAuth 2.0 Client ID</strong> → Web application</li>
+          <li>Authorized JS origins: <code>your-app.pages.dev</code></li>
+          <li>Authorized redirect URIs: <code>your-app.pages.dev/</code></li>
+          <li>Copy the <strong>Client ID</strong> and paste below</li>
+        </ol>
+      </div>
+      <div class="field" style="margin-top:14px">
+        <label>Google OAuth Client ID</label>
+        <input class="fi" id="gcal-client-id" placeholder="123456789-abc...apps.googleusercontent.com"/>
+        <div style="font-size:11px;color:var(--tl);margin-top:4px">No client secret needed — uses secure PKCE flow</div>
+      </div>
+    </div>
+    <div class="modal-foot">
+      <button class="btn-secondary" onclick="closeModal('m-gcal')">Cancel</button>
+      <button class="btn-primary" onclick="saveGCalClientId()">Save & Connect →</button>
+    </div>
+  </div>
+</div>
+
+<!-- Hidden file inputs -->
+<input type="file" id="profile-file" accept="image/*" style="display:none">
+<input type="file" id="scrap-file" accept="image/*" multiple style="display:none">
+
+<!-- Inline styles for modal inputs (override .field) -->
+<style>
+.fi { width:100%; padding:8px 11px; border:1px solid var(--border); border-radius:6px; background:var(--cream); font-family:'Source Sans 3',sans-serif; font-size:13px; color:var(--td); outline:none; transition:border-color .15s; }
+.fi:focus { border-color:var(--teal); }
+</style>
+
+<script src="app.js"></script>
+
+<!-- Planner budget snapshot (rendered after app.js loads) -->
+<script>
+window.addEventListener('load', () => {
+  // Render planner budget snapshot
+  function renderPlannerSnap() {
+    const el = document.getElementById('planner-bud-snap');
+    if (!el) return;
+    let inc = 0, exp = 0, sav = 0;
+    budget.forEach(b => { if (b.dir === 'income') inc += b.amount; else if (b.dir === 'expense') exp += b.amount; else sav += b.amount; });
+    const bal = inc - exp - sav;
+    el.innerHTML = `<div class="card-body" style="font-size:13px">
+      <div style="display:flex;justify-content:space-between;margin-bottom:6px"><span style="color:var(--tl)">Inkomst</span><span class="income-color">+${fmtKr(inc)}</span></div>
+      <div style="display:flex;justify-content:space-between;margin-bottom:6px"><span style="color:var(--tl)">Utgifter</span><span class="expense-color">-${fmtKr(exp + sav)}</span></div>
+      <div style="display:flex;justify-content:space-between;padding-top:6px;border-top:1px solid var(--border)"><span><strong>Balans</strong></span><span class="balance-color" style="font-weight:700">${fmtKr(bal)}</span></div>
+      <button class="btn-link" style="margin-top:10px;width:100%;text-align:center" onclick="nav('budget')">View full budget →</button>
+    </div>`;
+  }
+  setTimeout(renderPlannerSnap, 100);
+
+  // Init radio FAB
+  document.getElementById('radio-fab').addEventListener('click', () => { toggleRadio(); if (radioOpen) renderRadio(); });
+  renderScrapbook();
+});
+</script>
+
+</body>
+</html>
