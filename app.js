@@ -13,38 +13,78 @@ let habits   = S.get('habits')  || [{ id: 1, name: 'Drink Water', emoji: '🫗' 
 let hChecks  = S.get('hChecks') || {};
 let budget   = S.get('budget')  || [{ id: 1, name: 'Lön', amount: 13804, dir: 'income', cat: 'Bas Inkomst' }, { id: 2, name: 'GYM', amount: 500, dir: 'expense', cat: 'Prenumeration' }, { id: 3, name: 'HBO', amount: 89, dir: 'expense', cat: 'Prenumeration' }, { id: 4, name: 'Claude', amount: 244.37, dir: 'expense', cat: 'Prenumeration' }, { id: 5, name: 'Notion', amount: 324, dir: 'expense', cat: 'Prenumeration' }, { id: 6, name: 'Opti Sparande', amount: 1115, dir: 'saving', cat: 'Sparande' }, { id: 7, name: 'Hus sparande', amount: 5000, dir: 'saving', cat: 'Sparande' }, { id: 8, name: 'Storytel', amount: 99, dir: 'expense', cat: 'Prenumeration' }, { id: 9, name: 'Sparande (extra)', amount: 300, dir: 'saving', cat: 'Sparande' }];
 let photos   = S.get('photos')  || [];
+
+// Class Schedule – stored in localStorage, editable via UI
+let schedule = S.get('schedule') || [
+  { id: 1, week: 'V6', days: [
+    { date: '9.2',  classes: ['13\u201314 Tr\u00e4ff 1', 'Weekcomm M'] },
+    { date: '10.2', classes: ['10\u201312 Pluggstuga'] },
+    { date: '11.2', classes: ['13\u201314 Pluggstuga'] },
+    { date: '12.2', classes: [] },
+    { date: '13.2', classes: ['10\u201311 Pluggstuga'] }
+  ]},
+  { id: 2, week: 'V7', days: [
+    { date: '16.2', classes: ['10\u201311 Pluggstuga'] },
+    { date: '17.2', classes: ['10\u201312 Pluggstuga'] },
+    { date: '18.2', classes: ['10\u201312 Pluggstuga', 'Tr\u00e4ff 4 Arbetslivet'] },
+    { date: '19.2', classes: [] },
+    { date: '20.2', classes: ['10\u201311 Pluggstuga'] }
+  ]},
+  { id: 3, week: 'V8', days: [
+    { date: '23.2', classes: [] },
+    { date: '24.2', classes: ['13\u201315 Tr\u00e4ff 6'] },
+    { date: '25.2', classes: ['13\u201315 Profession'] },
+    { date: '26.2', classes: [] },
+    { date: '27.2', classes: ['10\u201311 Pluggstuga'] }
+  ]},
+  { id: 4, week: 'V9', days: [
+    { date: '2.3', classes: [] },
+    { date: '3.3', classes: [] },
+    { date: '4.3', classes: [] },
+    { date: '5.3', classes: [] },
+    { date: '6.3', classes: [] }
+  ]}
+];
+
 let curNote  = null, curDiary = null;
 let hWkOff   = 0;
 let editMode = false;
 let journalMoods = S.get('journalMoods') || {};
+let schedEditMode = false;
+let radioEditMode = false;
 
 // Calendar
 let calY = 2026, calM = 2;
 const MONTHS_SV = ['Januari','Februari','Mars','April','Maj','Juni','Juli','Augusti','September','Oktober','November','December'];
-const DAYS_SV = ['Mån','Tis','Ons','Tor','Fre','Lör','Sön'];
+const DAYS_SV = ['M\u00e5n','Tis','Ons','Tor','Fre','L\u00f6r','S\u00f6n'];
 
 // Pomodoro
 let pom = { running: false, mode: 'work', total: 25 * 60, rem: 25 * 60, int: null, ses: 0, mins: 0 };
 
-// Google Calendar
-let gcalToken = S.get('gcalToken') || null;
+// Google Calendar – token is in-memory only (expires after 1 h, not persisted)
+let gcalToken = null;
 let gcalClientId = S.get('gcalClientId') || '';
 let gcalEvents = [];
 
 // Radio
 let radioOpen = false;
 let currentStation = null;
-const RADIO_STATIONS = [
-  { name: 'P3',     url: 'https://sverigesradio.se/topsy/direkt/srapi/164.mp3' },
-  { name: 'P1',     url: 'https://sverigesradio.se/topsy/direkt/srapi/132.mp3' },
-  { name: 'P4 Sthlm', url: 'https://sverigesradio.se/topsy/direkt/srapi/4722.mp3' },
-  { name: 'Lugna',  url: 'https://sverigesradio.se/topsy/direkt/srapi/2576.mp3' },
-  { name: 'NRJ',    url: 'https://stream-se.nrjaudio.fm/se-nrj' },
-  { name: 'Bandit', url: 'https://fm-stream.se/bandit/se' }
+let radioStations = S.get('radioStations') || [
+  { name: 'P3',      url: 'https://sverigesradio.se/topsy/direkt/srapi/164.mp3' },
+  { name: 'P1',      url: 'https://sverigesradio.se/topsy/direkt/srapi/132.mp3' },
+  { name: 'P4 Sthlm',url: 'https://sverigesradio.se/topsy/direkt/srapi/4722.mp3' },
+  { name: 'Lugna',   url: 'https://sverigesradio.se/topsy/direkt/srapi/2576.mp3' },
+  { name: 'NRJ',     url: 'https://stream-se.nrjaudio.fm/se-nrj' },
+  { name: 'Bandit',  url: 'https://fm-stream.se/bandit/se' }
 ];
 
 // Widget order
 let widgetOrder = S.get('widgetOrder') || ['nav', 'today', 'habits-today', 'budget-mini', 'calendar-widget', 'scrapbook'];
+
+// ===== UTILITIES =====
+function escHtml(s) {
+  return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+}
 
 // ===== NAV =====
 function nav(page) {
@@ -89,17 +129,17 @@ function buildWidget(id) {
   const w = document.createElement('div');
   w.className = 'widget';
   w.dataset.widget = id;
-  const handle = '<div class="widget-drag-handle" draggable="false">⠿</div>';
+  const handle = '<div class="widget-drag-handle" draggable="false">\u28bf</div>';
 
   switch (id) {
     case 'nav':
-      w.innerHTML = `${handle}<div class="card-head">🐚 Navigate</div><div class="home-nav-grid">
-        <button class="home-nav-btn" onclick="nav('journal')">📔 Journal</button>
-        <button class="home-nav-btn" onclick="nav('habits')">✓ Habits</button>
-        <button class="home-nav-btn" onclick="nav('budget')">💰 Budget</button>
-        <button class="home-nav-btn" onclick="nav('study')">📚 Study Hub</button>
-        <button class="home-nav-btn" onclick="nav('notes')">📝 Notes</button>
-        <button class="home-nav-btn" onclick="nav('planner')">📅 Planner</button>
+      w.innerHTML = `${handle}<div class="card-head">\ud83d\udc1a Navigate</div><div class="home-nav-grid">
+        <button class="home-nav-btn" onclick="nav('journal')">\ud83d\udcd4 Journal</button>
+        <button class="home-nav-btn" onclick="nav('habits')">\u2713 Habits</button>
+        <button class="home-nav-btn" onclick="nav('budget')">\ud83d\udcb0 Budget</button>
+        <button class="home-nav-btn" onclick="nav('study')">\ud83d\udcda Study Hub</button>
+        <button class="home-nav-btn" onclick="nav('notes')">\ud83d\udcdd Notes</button>
+        <button class="home-nav-btn" onclick="nav('planner')">\ud83d\udcc5 Planner</button>
       </div>`;
       break;
 
@@ -107,7 +147,7 @@ function buildWidget(id) {
       const today = new Date().toLocaleDateString('sv-SE');
       const todayHabits = habits.filter(h => hChecks[hKey(h.id, today)]);
       const pct = habits.length ? Math.round(todayHabits.length / habits.length * 100) : 0;
-      w.innerHTML = `${handle}<div class="card-head">☀️ Today at a Glance</div><div class="widget-body">
+      w.innerHTML = `${handle}<div class="card-head">\u2600\ufe0f Today at a Glance</div><div class="widget-body">
         <div style="font-size:13px;color:var(--tm);margin-bottom:10px"><strong>${pct}%</strong> habits done today</div>
         <div class="progress-bar"><div class="progress-fill" style="width:${pct}%"></div></div>
         <div style="margin-top:12px;display:flex;gap:6px">
@@ -123,13 +163,13 @@ function buildWidget(id) {
       const rows = habits.slice(0, 5).map(h => {
         const k = hKey(h.id, today);
         return `<div class="quick-habit-row">
-          <span>${h.emoji} ${h.name}</span>
+          <span>${h.emoji} ${escHtml(h.name)}</span>
           <input type="checkbox" class="hcb" ${hChecks[k] ? 'checked' : ''} onchange="togHToday('${k}',this.checked)">
         </div>`;
       }).join('');
-      w.innerHTML = `${handle}<div class="card-head">✓ Habits Today <span style="font-size:10px;color:var(--tl)">${new Date().toLocaleDateString('sv-SE',{weekday:'short'})}</span></div>
+      w.innerHTML = `${handle}<div class="card-head">\u2713 Habits Today <span style="font-size:10px;color:var(--tl)">${new Date().toLocaleDateString('sv-SE',{weekday:'short'})}</span></div>
         <div class="widget-body">${rows}
-        <button class="btn-link" style="margin-top:8px;width:100%;text-align:center" onclick="nav('habits')">See all habits →</button>
+        <button class="btn-link" style="margin-top:8px;width:100%;text-align:center" onclick="nav('habits')">See all habits \u2192</button>
       </div>`;
       break;
     }
@@ -138,11 +178,11 @@ function buildWidget(id) {
       let inc = 0, exp = 0, sav = 0;
       budget.forEach(b => { if (b.dir === 'income') inc += b.amount; else if (b.dir === 'expense') exp += b.amount; else sav += b.amount; });
       const bal = inc - exp - sav;
-      w.innerHTML = `${handle}<div class="card-head">💰 Budget · Mars 2026</div><div class="widget-body">
+      w.innerHTML = `${handle}<div class="card-head">\ud83d\udcb0 Budget \u00b7 Mars 2026</div><div class="widget-body">
         <div style="display:flex;justify-content:space-between;margin-bottom:6px;font-size:13px"><span style="color:var(--tl)">Inkomst</span><span class="income-color">+${fmtKr(inc)}</span></div>
         <div style="display:flex;justify-content:space-between;margin-bottom:6px;font-size:13px"><span style="color:var(--tl)">Utgifter</span><span class="expense-color">-${fmtKr(exp + sav)}</span></div>
         <div style="display:flex;justify-content:space-between;padding-top:6px;border-top:1px solid var(--border);font-size:14px"><span><strong>Balans</strong></span><span class="balance-color" style="font-weight:700">${fmtKr(bal)}</span></div>
-        <button class="btn-link" style="margin-top:10px;width:100%;text-align:center" onclick="nav('budget')">View full budget →</button>
+        <button class="btn-link" style="margin-top:10px;width:100%;text-align:center" onclick="nav('budget')">View full budget \u2192</button>
       </div>`;
       break;
     }
@@ -150,10 +190,10 @@ function buildWidget(id) {
     case 'calendar-widget': {
       const now = new Date();
       w.className = 'widget widget-wide';
-      w.innerHTML = `${handle}<div class="card-head">📅 Calendar · ${MONTHS_SV[calM]} ${calY}
+      w.innerHTML = `${handle}<div class="card-head">\ud83d\udcc5 Calendar \u00b7 ${MONTHS_SV[calM]} ${calY}
         <div style="display:flex;gap:4px">
-          <button class="cal-nb" onclick="calPrev();renderWidgets()">‹</button>
-          <button class="cal-nb" onclick="calNext();renderWidgets()">›</button>
+          <button class="cal-nb" onclick="calPrev();renderWidgets()">\u2039</button>
+          <button class="cal-nb" onclick="calNext();renderWidgets()">\u203a</button>
         </div>
       </div><div class="widget-body">${buildCalHtml(now)}</div>`;
       break;
@@ -162,9 +202,9 @@ function buildWidget(id) {
     case 'scrapbook': {
       const preview = photos.slice(0, 4);
       const grid2 = preview.map(p => `<img src="${p}" style="width:100%;height:62px;object-fit:cover;border-radius:5px">`).join('');
-      w.innerHTML = `${handle}<div class="card-head">✨ Scrapbook</div>
+      w.innerHTML = `${handle}<div class="card-head">\u2728 Scrapbook</div>
         <div style="padding:8px;display:grid;grid-template-columns:1fr 1fr;gap:5px;min-height:80px;cursor:pointer" onclick="nav('home')">
-          ${preview.length ? grid2 : '<div style="grid-column:1/3;display:flex;align-items:center;justify-content:center;font-size:11px;color:var(--tl)">+ Add photos ✨</div>'}
+          ${preview.length ? grid2 : '<div style="grid-column:1/3;display:flex;align-items:center;justify-content:center;font-size:11px;color:var(--tl)">+ Add photos \u2728</div>'}
         </div>`;
       break;
     }
@@ -226,7 +266,7 @@ function toggleEditMode() {
   grid.classList.toggle('edit-mode', editMode);
   document.querySelectorAll('.widget').forEach(w => { w.draggable = editMode; });
   const btn = document.querySelector('[onclick="toggleEditMode()"]');
-  if (btn) btn.textContent = editMode ? '✓ Done' : '✦ Customize';
+  if (btn) btn.textContent = editMode ? '\u2713 Done' : '\u2726 Customize';
 }
 
 function togHToday(k, v) { hChecks[k] = v; S.set('hChecks', hChecks); }
@@ -241,7 +281,7 @@ function renderProfilePhoto() {
     if (photo) {
       el.innerHTML = `<img src="${photo}" alt="Profile">`;
     } else {
-      el.innerHTML = id === 'hero-profile' ? '<span>🐚</span>' : '<span class="sb-photo-placeholder">🐚</span>';
+      el.innerHTML = id === 'hero-profile' ? '<span>\ud83d\udc1a</span>' : '<span class="sb-photo-placeholder">\ud83d\udc1a</span>';
     }
   });
 }
@@ -324,7 +364,7 @@ function saveJournalEntry(type) {
   if (!content && type !== 'thought') return;
   const entry = {
     id: Date.now(),
-    title: type === 'morning' ? 'Morning · ' + today : type === 'night' ? 'Night · ' + today : content.slice(0, 40),
+    title: type === 'morning' ? 'Morning \u00b7 ' + today : type === 'night' ? 'Night \u00b7 ' + today : content.slice(0, 40),
     date: today,
     type,
     mood: selectedMoods[type] || '',
@@ -337,25 +377,24 @@ function saveJournalEntry(type) {
   S.set('diary', diary);
   if (ta) ta.value = '';
   renderDiaryList();
-  // flash confirmation
   const btn = event?.target;
-  if (btn) { const orig = btn.textContent; btn.textContent = 'Saved ✓'; setTimeout(() => btn.textContent = orig, 1500); }
+  if (btn) { const orig = btn.textContent; btn.textContent = 'Saved \u2713'; setTimeout(() => btn.textContent = orig, 1500); }
 }
 
 function renderDiaryList() {
   const el = document.getElementById('diary-list');
   if (!el) return;
-  const moodClass = m => ({ '😊': 'mood-happy', '😌': 'mood-calm', '😴': 'mood-tired', '😤': 'mood-stressed', '😩': 'mood-stressed', '🥰': 'mood-happy', '😭': 'mood-calm' }[m] || 'mood-calm');
+  const moodClass = m => ({ '\ud83d\ude0a': 'mood-happy', '\ud83d\ude0c': 'mood-calm', '\ud83d\ude34': 'mood-tired', '\ud83d\ude24': 'mood-stressed', '\ud83d\ude29': 'mood-stressed', '\ud83e\udd70': 'mood-happy', '\ud83d\ude2d': 'mood-calm' }[m] || 'mood-calm');
   el.innerHTML = diary.map((e, i) => `
     <div class="diary-card" onclick="openDiaryEntry(${i})">
       <div class="diary-card-head">
         <div>
-          <div class="diary-title">${e.title}</div>
-          <div class="diary-date">${e.date}${e.type ? ' · ' + e.type : ''}</div>
+          <div class="diary-title">${escHtml(e.title)}</div>
+          <div class="diary-date">${e.date}${e.type ? ' \u00b7 ' + e.type : ''}</div>
         </div>
         <span class="mood-tag ${moodClass(e.mood)}">${e.mood || ''} ${e.type || 'entry'}</span>
       </div>
-      <div class="diary-preview">${(e.content || '').slice(0, 110)}${(e.content || '').length > 110 ? '…' : ''}</div>
+      <div class="diary-preview">${escHtml((e.content || '').slice(0, 110))}${(e.content || '').length > 110 ? '\u2026' : ''}</div>
     </div>
   `).join('') || '<div style="color:var(--tl);font-style:italic;font-size:13px">No entries yet.</div>';
 }
@@ -413,7 +452,7 @@ function hKey(id, d) {
 
 function renderHabits() {
   const days = getWeekDates(hWkOff);
-  document.getElementById('habits-week-lbl').textContent = `${days[0].getDate()} ${MONTHS_SV[days[0].getMonth()].toLowerCase()} – ${days[6].getDate()} ${MONTHS_SV[days[6].getMonth()].toLowerCase()} ${days[0].getFullYear()}`;
+  document.getElementById('habits-week-lbl').textContent = `${days[0].getDate()} ${MONTHS_SV[days[0].getMonth()].toLowerCase()} \u2013 ${days[6].getDate()} ${MONTHS_SV[days[6].getMonth()].toLowerCase()} ${days[0].getFullYear()}`;
 
   let html = `<thead><tr>
     <th>Habits</th>
@@ -421,7 +460,7 @@ function renderHabits() {
   </tr></thead><tbody>`;
 
   habits.forEach(h => {
-    html += `<tr><td><span style="margin-right:6px">${h.emoji}</span>${h.name}</td>`;
+    html += `<tr><td><span style="margin-right:6px">${h.emoji}</span>${escHtml(h.name)}</td>`;
     days.forEach(day => {
       const k = hKey(h.id, day);
       html += `<td><input type="checkbox" class="hcb" ${hChecks[k] ? 'checked' : ''} onchange="togH('${k}',this.checked)"></td>`;
@@ -447,7 +486,7 @@ function hWeek(d) { hWkOff += d; renderHabits(); }
 
 function addHabit() {
   const name = document.getElementById('mh-name').value.trim();
-  const emoji = document.getElementById('mh-emoji').value.trim() || '⭐';
+  const emoji = document.getElementById('mh-emoji').value.trim() || '\u2b50';
   if (!name) return;
   habits.push({ id: Date.now(), name, emoji });
   S.set('habits', habits);
@@ -475,12 +514,12 @@ function renderBudget() {
     const net = b.dir === 'income' ? b.amount : -b.amount;
     const [cls, lbl] = dirMap[b.dir];
     return `<tr>
-      <td>${b.name}</td>
+      <td>${escHtml(b.name)}</td>
       <td>${fmtKr(b.amount)}</td>
       <td><span class="tag ${cls}">${lbl}</span></td>
-      <td><span class="tag tag-cat">${b.cat}</span></td>
+      <td><span class="tag tag-cat">${escHtml(b.cat)}</span></td>
       <td class="${net > 0 ? 'amount-pos' : 'amount-neg'}">${net > 0 ? '+' : ''}${fmtKr(net)}</td>
-      <td><button onclick="deleteBudget(${b.id})" style="background:none;border:none;color:var(--tl);cursor:pointer;font-size:12px">✕</button></td>
+      <td><button onclick="deleteBudget(${b.id})" style="background:none;border:none;color:var(--tl);cursor:pointer;font-size:12px">\u2715</button></td>
     </tr>`;
   }).join('');
 }
@@ -489,7 +528,7 @@ function addBudget() {
   const name = document.getElementById('mb-name').value.trim();
   const amount = parseFloat(document.getElementById('mb-amount').value) || 0;
   const dir = document.getElementById('mb-dir').value;
-  const cat = document.getElementById('mb-cat').value.trim() || 'Övrigt';
+  const cat = document.getElementById('mb-cat').value.trim() || '\u00d6vrigt';
   if (!name) return;
   budget.push({ id: Date.now(), name, amount, dir, cat });
   S.set('budget', budget);
@@ -525,10 +564,10 @@ function pomToggle() {
   if (pom.running) {
     clearInterval(pom.int);
     pom.running = false;
-    document.getElementById('pom-btn').textContent = '▶ Resume';
+    document.getElementById('pom-btn').textContent = '\u25b6 Resume';
   } else {
     pom.running = true;
-    document.getElementById('pom-btn').textContent = '⏸ Pause';
+    document.getElementById('pom-btn').textContent = '\u23f8 Pause';
     pom.int = setInterval(() => {
       pom.rem--;
       if (pom.rem <= 0) {
@@ -543,7 +582,7 @@ function pomToggle() {
           if (dots[(pom.ses - 1) % 4]) dots[(pom.ses - 1) % 4].classList.add('done');
         }
         pom.rem = 0;
-        document.getElementById('pom-btn').textContent = '▶ Start';
+        document.getElementById('pom-btn').textContent = '\u25b6 Start';
         pomRender();
         return;
       }
@@ -556,7 +595,7 @@ function pomReset() {
   clearInterval(pom.int);
   pom.running = false;
   pom.rem = pom.total;
-  document.getElementById('pom-btn').textContent = '▶ Start';
+  document.getElementById('pom-btn').textContent = '\u25b6 Start';
   pomRender();
 }
 
@@ -582,10 +621,10 @@ function renderNotes() {
   }
   el.innerHTML = notes.map(n => `
     <div class="note-card" onclick="openNote(${n.id})">
-      <div class="note-card-thumb">📝</div>
+      <div class="note-card-thumb">\ud83d\udcdd</div>
       <div class="note-card-body">
-        <div class="note-card-title">${n.title}</div>
-        <div class="note-card-meta">${n.class || 'General'} · ${n.date || ''}</div>
+        <div class="note-card-title">${escHtml(n.title)}</div>
+        <div class="note-card-meta">${escHtml(n.class || 'General')} \u00b7 ${n.date || ''}</div>
       </div>
     </div>
   `).join('');
@@ -596,7 +635,7 @@ function renderStudyNotesList() {
   if (!el) return;
   if (!notes.length) { el.innerHTML = '<div style="color:var(--tl);font-style:italic;font-size:13px">No notes yet.</div>'; return; }
   el.innerHTML = `<div style="display:flex;gap:8px;flex-wrap:wrap">
-    ${notes.slice(0, 10).map(n => `<span style="background:var(--cream);border:1px solid var(--border);border-radius:5px;padding:5px 11px;font-size:12px;cursor:pointer;color:var(--tm)" onclick="openNote(${n.id})">${n.title}</span>`).join('')}
+    ${notes.slice(0, 10).map(n => `<span style="background:var(--cream);border:1px solid var(--border);border-radius:5px;padding:5px 11px;font-size:12px;cursor:pointer;color:var(--tm)" onclick="openNote(${n.id})">${escHtml(n.title)}</span>`).join('')}
   </div>`;
 }
 
@@ -605,7 +644,7 @@ function renderSbRecentNotes() {
   if (!el) return;
   el.innerHTML = notes.slice(0, 4).map(n => `
     <div class="sb-item" onclick="openNote(${n.id})">
-      <span class="sb-icon">📝</span> ${n.title.slice(0, 20)}${n.title.length > 20 ? '…' : ''}
+      <span class="sb-icon">\ud83d\udcdd</span> ${escHtml(n.title.slice(0, 20))}${n.title.length > 20 ? '\u2026' : ''}
     </div>
   `).join('') || '<div style="font-size:11px;color:var(--tl);padding:4px 14px">No notes yet</div>';
 }
@@ -621,7 +660,7 @@ function createNote() {
   const title = document.getElementById('mn-title').value.trim() || 'Untitled Note';
   const cls = document.getElementById('mn-class').value.trim();
   const date = document.getElementById('mn-date').value;
-  curNote = { id: Date.now(), title, class: cls, date, cues: '', notes: '', summary: '', mood: '✨' };
+  curNote = { id: Date.now(), title, class: cls, date, cues: '', notes: '', summary: '', mood: '\u2728' };
   closeModal('m-note');
   loadNote(curNote);
 }
@@ -633,7 +672,7 @@ function loadNote(n) {
   document.getElementById('note-tag').textContent = n.class || 'Note';
   document.getElementById('note-date').value = n.date || '';
   document.getElementById('note-class').value = n.class || '';
-  document.getElementById('note-mood').value = n.mood || '✨';
+  document.getElementById('note-mood').value = n.mood || '\u2728';
   document.getElementById('note-cues').value = n.cues || '';
   document.getElementById('note-notes').value = n.notes || '';
   document.getElementById('note-summary').value = n.summary || '';
@@ -664,6 +703,22 @@ function deleteNote(id) {
 // ===== PLANNER =====
 function renderPlanner() {
   renderCal();
+  renderSchedule();
+  renderPlannerBudgetSnap();
+}
+
+function renderPlannerBudgetSnap() {
+  const el = document.getElementById('planner-bud-snap');
+  if (!el) return;
+  let inc = 0, exp = 0, sav = 0;
+  budget.forEach(b => { if (b.dir === 'income') inc += b.amount; else if (b.dir === 'expense') exp += b.amount; else sav += b.amount; });
+  const bal = inc - exp - sav;
+  el.innerHTML = `<div class="card-body" style="font-size:13px">
+    <div style="display:flex;justify-content:space-between;margin-bottom:6px"><span style="color:var(--tl)">Inkomst</span><span class="income-color">+${fmtKr(inc)}</span></div>
+    <div style="display:flex;justify-content:space-between;margin-bottom:6px"><span style="color:var(--tl)">Utgifter</span><span class="expense-color">-${fmtKr(exp + sav)}</span></div>
+    <div style="display:flex;justify-content:space-between;padding-top:6px;border-top:1px solid var(--border)"><span><strong>Balans</strong></span><span class="balance-color" style="font-weight:700">${fmtKr(bal)}</span></div>
+    <button class="btn-link" style="margin-top:10px;width:100%;text-align:center" onclick="nav('budget')">View full budget \u2192</button>
+  </div>`;
 }
 
 function renderCal() {
@@ -681,8 +736,113 @@ function renderCal() {
     html += `<div class="cal-day${isT ? ' today' : ''}">${d}</div>`;
   }
   el.innerHTML = html;
-
   renderGCalEvents();
+}
+
+// ===== CLASS SCHEDULE =====
+function renderSchedule() {
+  const el = document.getElementById('schedule-container');
+  if (!el) return;
+  if (!schedule.length) {
+    el.innerHTML = '<div class="card"><div class="card-body" style="color:var(--tl);font-style:italic;font-size:13px">No schedule yet. Click + Week to add one.</div></div>';
+    return;
+  }
+  const DAY_NAMES = ['M\u00e5n', 'Tis', 'Ons', 'Tor', 'Fre'];
+  let html = '<div class="card"><div style="padding:0"><table class="sched"><tr><th>V</th>' +
+    DAY_NAMES.map(d => `<th>${d}</th>`).join('') +
+    (schedEditMode ? '<th></th>' : '') + '</tr>';
+
+  schedule.forEach(week => {
+    html += `<tr><td class="week-num">${escHtml(week.week)}</td>`;
+    (week.days || []).forEach((day, dayIdx) => {
+      html += `<td><span class="sched-date">${escHtml(day.date)}</span>`;
+      (day.classes || []).forEach((cls, clsIdx) => {
+        html += `<span class="class-pill">${escHtml(cls)}`;
+        if (schedEditMode) {
+          html += `<button onclick="removeScheduleClass(${week.id},${dayIdx},${clsIdx})" class="sched-pill-del" title="Remove">\u2715</button>`;
+        }
+        html += '</span>';
+      });
+      if (schedEditMode) {
+        html += `<button onclick="openAddSchedClass(${week.id},${dayIdx})" class="sched-add-cls-btn">+ class</button>`;
+      }
+      html += '</td>';
+    });
+    if (schedEditMode) {
+      html += `<td><button onclick="removeScheduleWeek(${week.id})" class="sched-del-week" title="Remove week">\u2715</button></td>`;
+    }
+    html += '</tr>';
+  });
+
+  html += '</table></div></div>';
+  el.innerHTML = html;
+}
+
+function toggleSchedEditMode() {
+  schedEditMode = !schedEditMode;
+  const btn = document.getElementById('sched-edit-btn');
+  if (btn) btn.textContent = schedEditMode ? '\u2713 Done' : '\u270e Edit';
+  renderSchedule();
+}
+
+let pendingSchedWeekId = null, pendingSchedDayIdx = null;
+
+function openAddSchedClass(weekId, dayIdx) {
+  pendingSchedWeekId = weekId;
+  pendingSchedDayIdx = dayIdx;
+  const week = schedule.find(w => w.id === weekId);
+  const day = week?.days[dayIdx];
+  const lbl = document.getElementById('ms-context');
+  if (lbl) lbl.textContent = week ? `${week.week} \u00b7 ${['M\u00e5n','Tis','Ons','Tor','Fre'][dayIdx] || ''} ${day?.date || ''}` : '';
+  document.getElementById('ms-label').value = '';
+  openModal('m-sched');
+}
+
+function addScheduleClass() {
+  const label = document.getElementById('ms-label').value.trim();
+  if (!label || pendingSchedWeekId === null) return;
+  const week = schedule.find(w => w.id === pendingSchedWeekId);
+  if (!week || !week.days[pendingSchedDayIdx]) return;
+  week.days[pendingSchedDayIdx].classes.push(label);
+  S.set('schedule', schedule);
+  closeModal('m-sched');
+  renderSchedule();
+}
+
+function removeScheduleClass(weekId, dayIdx, clsIdx) {
+  const week = schedule.find(w => w.id === weekId);
+  if (!week || !week.days[dayIdx]) return;
+  week.days[dayIdx].classes.splice(clsIdx, 1);
+  S.set('schedule', schedule);
+  renderSchedule();
+}
+
+function openAddSchedWeek() {
+  ['msw-week','msw-d0','msw-d1','msw-d2','msw-d3','msw-d4'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.value = '';
+  });
+  openModal('m-sched-week');
+}
+
+function addScheduleWeek() {
+  const weekLabel = document.getElementById('msw-week').value.trim();
+  if (!weekLabel) return;
+  const dates = ['msw-d0','msw-d1','msw-d2','msw-d3','msw-d4'].map(id => {
+    const el = document.getElementById(id);
+    return el ? el.value.trim() : '';
+  });
+  const days = dates.map(date => ({ date, classes: [] }));
+  schedule.push({ id: Date.now(), week: weekLabel, days });
+  S.set('schedule', schedule);
+  closeModal('m-sched-week');
+  renderSchedule();
+}
+
+function removeScheduleWeek(id) {
+  schedule = schedule.filter(w => w.id !== id);
+  S.set('schedule', schedule);
+  renderSchedule();
 }
 
 // ===== SCRAPBOOK =====
@@ -692,10 +852,10 @@ function renderScrapbook() {
   let html = photos.map((p, i) => `
     <div class="scrap-slot">
       <img src="${p}" alt="photo">
-      <button class="scrap-del" onclick="delScrap(${i})">✕</button>
+      <button class="scrap-del" onclick="delScrap(${i})">\u2715</button>
     </div>
   `).join('');
-  html += `<div class="scrap-slot" onclick="addScrap()"><div class="scrap-hint"><span class="plus">＋</span>Add Photo</div></div>`;
+  html += `<div class="scrap-slot" onclick="addScrap()"><div class="scrap-hint"><span class="plus">\uff0b</span>Add Photo</div></div>`;
   el.innerHTML = html;
 }
 
@@ -714,22 +874,61 @@ function toggleRadio() {
 function renderRadio() {
   const el = document.getElementById('radio-stations');
   if (!el) return;
-  el.innerHTML = RADIO_STATIONS.map((s, i) => `
-    <button class="radio-stn${currentStation === i ? ' playing' : ''}" onclick="playStation(${i})">${s.name}</button>
+  el.innerHTML = radioStations.map((s, i) => `
+    <span class="radio-stn-wrap">
+      <button class="radio-stn${currentStation === i ? ' playing' : ''}" onclick="playStation(${i})">${escHtml(s.name)}</button>${radioEditMode ? `<button onclick="removeRadioStation(${i})" class="radio-stn-del" title="Remove">\u2715</button>` : ''}
+    </span>
   `).join('');
+  const editBtn = document.getElementById('radio-edit-btn');
+  if (editBtn) editBtn.textContent = radioEditMode ? '\u2713' : '\u2699\ufe0f';
+  const editArea = document.getElementById('radio-edit-area');
+  if (editArea) editArea.style.display = radioEditMode ? 'block' : 'none';
+}
+
+function toggleRadioEditMode() {
+  radioEditMode = !radioEditMode;
+  renderRadio();
 }
 
 function playStation(i) {
   currentStation = i;
   const audio = document.getElementById('radio-audio');
-  const stn = RADIO_STATIONS[i];
+  const stn = radioStations[i];
+  if (!stn) return;
   audio.src = stn.url;
   audio.volume = parseFloat(document.getElementById('radio-vol')?.value || 0.7);
   audio.play().catch(() => {});
   document.getElementById('radio-name').textContent = stn.name;
   document.getElementById('radio-stream').textContent = 'Playing...';
-  document.getElementById('radio-btn').textContent = '⏸';
+  document.getElementById('radio-btn').textContent = '\u23f8';
   document.querySelectorAll('.radio-stn').forEach((b, j) => b.classList.toggle('playing', j === i));
+}
+
+function addRadioStation() {
+  const name = document.getElementById('radio-new-name').value.trim();
+  const url = document.getElementById('radio-new-url').value.trim();
+  if (!name || !url) return;
+  radioStations.push({ name, url });
+  S.set('radioStations', radioStations);
+  document.getElementById('radio-new-name').value = '';
+  document.getElementById('radio-new-url').value = '';
+  renderRadio();
+}
+
+function removeRadioStation(i) {
+  if (currentStation === i) {
+    const audio = document.getElementById('radio-audio');
+    if (audio) { audio.pause(); audio.src = ''; }
+    currentStation = null;
+    document.getElementById('radio-name').textContent = 'Radio';
+    document.getElementById('radio-stream').textContent = 'Select a station';
+    document.getElementById('radio-btn').textContent = '\u25b6';
+  } else if (currentStation !== null && currentStation > i) {
+    currentStation--;
+  }
+  radioStations.splice(i, 1);
+  S.set('radioStations', radioStations);
+  renderRadio();
 }
 
 function radioToggle() {
@@ -737,10 +936,10 @@ function radioToggle() {
   if (!audio) return;
   if (audio.paused) {
     if (currentStation !== null) audio.play().catch(() => {});
-    document.getElementById('radio-btn').textContent = '⏸';
+    document.getElementById('radio-btn').textContent = '\u23f8';
   } else {
     audio.pause();
-    document.getElementById('radio-btn').textContent = '▶';
+    document.getElementById('radio-btn').textContent = '\u25b6';
   }
 }
 
@@ -753,22 +952,32 @@ window.addEventListener('load', () => {
 });
 
 // ===== GOOGLE CALENDAR =====
+// Uses Google Identity Services (GIS) token client – no backend required.
+// Token is in-memory only (expires after 1 h). gcalClientId is persisted.
+
 function toggleGCal() {
-  if (gcalToken) {
-    openGCalConnected();
-  } else {
+  if (!gcalClientId) {
     openModal('m-gcal');
+  } else if (gcalToken) {
+    if (confirm('Disconnect Google Calendar?')) {
+      gcalToken = null;
+      gcalClientId = '';
+      S.set('gcalClientId', '');
+      gcalEvents = [];
+      updateGCalBtnUI(false);
+      renderGCalEvents();
+    }
+  } else {
+    // clientId set but token expired/missing – re-authenticate
+    startGCalAuth();
   }
 }
 
-function openGCalConnected() {
-  if (confirm('Disconnect Google Calendar?')) {
-    gcalToken = null;
-    gcalEvents = [];
-    S.set('gcalToken', null);
-    document.getElementById('sb-gcal-btn').textContent = '📅 Google Cal';
-    document.getElementById('sb-gcal-btn').classList.remove('connected');
-  }
+function updateGCalBtnUI(connected) {
+  const btn = document.getElementById('sb-gcal-btn');
+  if (!btn) return;
+  btn.textContent = connected ? '\u2713 Google Cal' : '\ud83d\udcc5 Google Cal';
+  btn.classList.toggle('connected', !!connected);
 }
 
 function saveGCalClientId() {
@@ -776,60 +985,47 @@ function saveGCalClientId() {
   if (!id) return;
   gcalClientId = id;
   S.set('gcalClientId', id);
+  closeModal('m-gcal');
   startGCalAuth();
 }
 
-async function startGCalAuth() {
-  // PKCE flow
-  const verifier = generateVerifier();
-  const challenge = await generateChallenge(verifier);
-  sessionStorage.setItem('pkce_verifier', verifier);
-  sessionStorage.setItem('pkce_client_id', gcalClientId);
-
-  const params = new URLSearchParams({
+function startGCalAuth() {
+  if (typeof google === 'undefined' || !google?.accounts?.oauth2) {
+    alert('Google Sign-In library is still loading. Please try again in a moment.');
+    return;
+  }
+  const client = google.accounts.oauth2.initTokenClient({
     client_id: gcalClientId,
-    redirect_uri: location.origin + location.pathname,
-    response_type: 'code',
     scope: 'https://www.googleapis.com/auth/calendar.readonly',
-    code_challenge: challenge,
-    code_challenge_method: 'S256',
-    access_type: 'offline',
-    prompt: 'consent'
-  });
-  location.href = 'https://accounts.google.com/o/oauth2/v2/auth?' + params;
-}
-
-async function handleGCalCallback() {
-  const params = new URLSearchParams(location.search);
-  const code = params.get('code');
-  if (!code) return;
-
-  const verifier = sessionStorage.getItem('pkce_verifier');
-  const clientId = sessionStorage.getItem('pkce_client_id') || gcalClientId;
-  if (!verifier || !clientId) return;
-
-  // Clean URL
-  history.replaceState({}, '', location.pathname);
-
-  try {
-    const res = await fetch('https://oauth2.googleapis.com/token', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-      body: new URLSearchParams({
-        code, client_id: clientId, redirect_uri: location.origin + location.pathname,
-        code_verifier: verifier, grant_type: 'authorization_code'
-      })
-    });
-    const data = await res.json();
-    if (data.access_token) {
-      gcalToken = data.access_token;
-      S.set('gcalToken', gcalToken);
-      S.set('gcalClientId', clientId);
-      document.getElementById('sb-gcal-btn').textContent = '✓ Google Cal';
-      document.getElementById('sb-gcal-btn').classList.add('connected');
+    callback: resp => {
+      if (resp.error) { console.error('GCal auth error:', resp.error); return; }
+      gcalToken = resp.access_token;
+      updateGCalBtnUI(true);
       fetchGCalEvents();
     }
-  } catch (e) { console.error('GCal auth error', e); }
+  });
+  client.requestAccessToken();
+}
+
+function tryGCalSilentAuth() {
+  if (!gcalClientId) return;
+  if (typeof google === 'undefined' || !google?.accounts?.oauth2) {
+    setTimeout(tryGCalSilentAuth, 800);
+    return;
+  }
+  const client = google.accounts.oauth2.initTokenClient({
+    client_id: gcalClientId,
+    scope: 'https://www.googleapis.com/auth/calendar.readonly',
+    prompt: '',
+    callback: resp => {
+      if (!resp.error && resp.access_token) {
+        gcalToken = resp.access_token;
+        updateGCalBtnUI(true);
+        fetchGCalEvents();
+      }
+    }
+  });
+  client.requestAccessToken();
 }
 
 async function fetchGCalEvents() {
@@ -841,7 +1037,12 @@ async function fetchGCalEvents() {
     const res = await fetch(`https://www.googleapis.com/calendar/v3/calendars/primary/events?timeMin=${min}&timeMax=${max}&singleEvents=true&orderBy=startTime&maxResults=20`, {
       headers: { Authorization: 'Bearer ' + gcalToken }
     });
-    if (res.status === 401) { gcalToken = null; S.set('gcalToken', null); return; }
+    if (res.status === 401) {
+      gcalToken = null;
+      updateGCalBtnUI(false);
+      renderGCalEvents();
+      return;
+    }
     const data = await res.json();
     gcalEvents = data.items || [];
     renderGCalEvents();
@@ -851,7 +1052,10 @@ async function fetchGCalEvents() {
 function renderGCalEvents() {
   const el = document.getElementById('gcal-events');
   if (!el) return;
-  if (!gcalToken) { el.innerHTML = '<div class="gcal-widget-empty">Not connected. Click "Google Cal" in sidebar.</div>'; return; }
+  if (!gcalToken) {
+    el.innerHTML = '<div class="gcal-widget-empty">Not connected. Click "\ud83d\udcc5 Google Cal" in sidebar to connect.</div>';
+    return;
+  }
   if (!gcalEvents.length) { el.innerHTML = '<div class="gcal-widget-empty">No upcoming events.</div>'; return; }
   const today = new Date();
   const upcoming = gcalEvents.filter(e => {
@@ -860,21 +1064,11 @@ function renderGCalEvents() {
   }).slice(0, 5);
   el.innerHTML = upcoming.map(e => {
     const start = new Date(e.start?.dateTime || e.start?.date);
-    const time = e.start?.dateTime ? start.toLocaleTimeString('sv-SE', { hour: '2-digit', minute: '2-digit' }) : start.toLocaleDateString('sv-SE', { month: 'short', day: 'numeric' });
-    return `<div class="gcal-event"><div class="gcal-event-time">${time}</div><div class="gcal-event-title">${e.summary || 'Event'}</div></div>`;
+    const time = e.start?.dateTime
+      ? start.toLocaleTimeString('sv-SE', { hour: '2-digit', minute: '2-digit' })
+      : start.toLocaleDateString('sv-SE', { month: 'short', day: 'numeric' });
+    return `<div class="gcal-event"><div class="gcal-event-time">${time}</div><div class="gcal-event-title">${escHtml(e.summary || 'Event')}</div></div>`;
   }).join('');
-}
-
-// PKCE helpers
-function generateVerifier() {
-  const arr = new Uint8Array(32);
-  crypto.getRandomValues(arr);
-  return btoa(String.fromCharCode(...arr)).replace(/\+/g, '-').replace(/\//g, '_').replace(/=/g, '');
-}
-
-async function generateChallenge(verifier) {
-  const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(verifier));
-  return btoa(String.fromCharCode(...new Uint8Array(buf))).replace(/\+/g, '-').replace(/\//g, '_').replace(/=/g, '');
 }
 
 // ===== MODALS =====
@@ -899,21 +1093,19 @@ window.addEventListener('load', () => {
   renderProfilePhoto();
   renderSbRecentNotes();
 
-  // Sidebar nav
   document.querySelectorAll('.sb-item[data-view]').forEach(item => {
     item.addEventListener('click', () => nav(item.dataset.view));
   });
 
-  // Handle Google Calendar OAuth callback
-  if (location.search.includes('code=')) handleGCalCallback();
-
-  // If already have token, fetch events
-  if (gcalToken) {
-    document.getElementById('sb-gcal-btn').textContent = '✓ Google Cal';
-    document.getElementById('sb-gcal-btn').classList.add('connected');
-    fetchGCalEvents();
+  // If clientId is saved, show connected state and try silent auth
+  if (gcalClientId) {
+    updateGCalBtnUI(true);
+    setTimeout(tryGCalSilentAuth, 1000);
   }
 
-  // Boot home view
+  // Radio FAB
+  document.getElementById('radio-fab').addEventListener('click', () => { toggleRadio(); if (radioOpen) renderRadio(); });
+
+  renderScrapbook();
   nav('home');
 });

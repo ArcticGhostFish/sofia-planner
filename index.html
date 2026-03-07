@@ -7,6 +7,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,600;1,400&family=Lora:ital,wght@0,400;0,500;1,400&family=Source+Sans+3:wght@300;400;600&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="style.css">
+  <script src="https://accounts.google.com/gsi/client" async></script>
 </head>
 <body>
 
@@ -382,18 +383,14 @@
       </div>
       <!-- Schedule column -->
       <div>
-        <div class="section-header" style="margin-bottom:10px">Class Schedule · <em>Mars</em></div>
-        <div class="card">
-          <div style="padding:0">
-            <table class="sched">
-              <tr><th>V</th><th>Mån</th><th>Tis</th><th>Ons</th><th>Tor</th><th>Fre</th></tr>
-              <tr><td class="week-num">V6</td><td>9.2<span class="class-pill">13–14 Träff 1</span><span class="class-pill">Weekcomm M</span></td><td>10.2<span class="class-pill">10–12 Pluggstuga</span></td><td>11.2<span class="class-pill">13–14 Pluggstuga</span></td><td>12.2</td><td>13.2<span class="class-pill">10–11 Pluggstuga</span></td></tr>
-              <tr><td class="week-num">V7</td><td>16.2<span class="class-pill">10–11 Pluggstuga</span></td><td>17.2<span class="class-pill">10–12 Pluggstuga</span></td><td>18.2<span class="class-pill">10–12 Pluggstuga</span><span class="class-pill">Träff 4 Arbetslivet</span></td><td>19.2</td><td>20.2<span class="class-pill">10–11 Pluggstuga</span></td></tr>
-              <tr><td class="week-num">V8</td><td>23.2</td><td>24.2<span class="class-pill">13–15 Träff 6</span></td><td>25.2<span class="class-pill">13–15 Profession</span></td><td>26.2</td><td>27.2<span class="class-pill">10–11 Pluggstuga</span></td></tr>
-              <tr><td class="week-num">V9</td><td>2.3</td><td>3.3</td><td>4.3</td><td>5.3</td><td>6.3</td></tr>
-            </table>
+        <div class="section-header" style="margin-bottom:10px">
+          Class Schedule · <em>Mars</em>
+          <div style="display:flex;gap:5px">
+            <button class="btn-link" onclick="openAddSchedWeek()">+ Week</button>
+            <button class="btn-link" id="sched-edit-btn" onclick="toggleSchedEditMode()">✎ Edit</button>
           </div>
         </div>
+        <div id="schedule-container"></div>
       </div>
       <!-- Right column -->
       <div>
@@ -426,7 +423,14 @@
       <div class="radio-stream" id="radio-stream">Select a station</div>
     </div>
     <input type="range" class="radio-vol" id="radio-vol" min="0" max="1" step="0.05" value="0.7" title="Volume">
+    <button id="radio-edit-btn" class="radio-edit-toggle" onclick="toggleRadioEditMode()" title="Edit stations">⚙️</button>
     <button class="radio-close" onclick="toggleRadio()">✕</button>
+  </div>
+  <div id="radio-edit-area" style="display:none;padding:8px 10px;border-top:1px solid var(--border)">
+    <div style="font-size:9.5px;font-weight:700;letter-spacing:.09em;text-transform:uppercase;color:var(--tl);margin-bottom:6px">Add Station</div>
+    <input class="radio-add-input" id="radio-new-name" placeholder="Station name (e.g. P3)" />
+    <input class="radio-add-input" id="radio-new-url" placeholder="Stream URL (https://...)" style="margin-top:4px"/>
+    <button class="btn-primary" style="width:100%;margin-top:6px;padding:5px 10px;font-size:11px" onclick="addRadioStation()">+ Add</button>
   </div>
   <audio id="radio-audio" preload="none"></audio>
 </div>
@@ -512,6 +516,43 @@
   </div>
 </div>
 
+<!-- Add Schedule Class -->
+<div class="modal-bg" id="m-sched">
+  <div class="modal">
+    <div class="modal-head"><div class="modal-title">Add Class</div><button class="modal-close" onclick="closeModal('m-sched')">✕</button></div>
+    <div class="modal-body">
+      <div style="font-size:11px;color:var(--tl);margin-bottom:10px" id="ms-context"></div>
+      <div class="field"><label>Class / Event Label</label><input class="fi" id="ms-label" placeholder="e.g. 10–12 Pluggstuga"/></div>
+    </div>
+    <div class="modal-foot">
+      <button class="btn-secondary" onclick="closeModal('m-sched')">Cancel</button>
+      <button class="btn-primary" onclick="addScheduleClass()">Add →</button>
+    </div>
+  </div>
+</div>
+
+<!-- Add Schedule Week -->
+<div class="modal-bg" id="m-sched-week">
+  <div class="modal">
+    <div class="modal-head"><div class="modal-title">Add Week</div><button class="modal-close" onclick="closeModal('m-sched-week')">✕</button></div>
+    <div class="modal-body">
+      <div class="field"><label>Week Label</label><input class="fi" id="msw-week" placeholder="e.g. V10"/></div>
+      <div style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.07em;color:var(--tl);margin-bottom:6px">Dates (Mon–Fri)</div>
+      <div class="field-row" style="grid-template-columns:repeat(5,1fr)">
+        <div class="field"><label>Mån</label><input class="fi" id="msw-d0" placeholder="7.4"/></div>
+        <div class="field"><label>Tis</label><input class="fi" id="msw-d1" placeholder="8.4"/></div>
+        <div class="field"><label>Ons</label><input class="fi" id="msw-d2" placeholder="9.4"/></div>
+        <div class="field"><label>Tor</label><input class="fi" id="msw-d3" placeholder="10.4"/></div>
+        <div class="field"><label>Fre</label><input class="fi" id="msw-d4" placeholder="11.4"/></div>
+      </div>
+    </div>
+    <div class="modal-foot">
+      <button class="btn-secondary" onclick="closeModal('m-sched-week')">Cancel</button>
+      <button class="btn-primary" onclick="addScheduleWeek()">Add Week →</button>
+    </div>
+  </div>
+</div>
+
 <!-- Google Calendar Setup -->
 <div class="modal-bg" id="m-gcal">
   <div class="modal">
@@ -523,15 +564,14 @@
           <li>Go to <a href="https://console.cloud.google.com" target="_blank">console.cloud.google.com</a> → New project</li>
           <li>Search <code>Google Calendar API</code> → Enable it</li>
           <li>Credentials → Create Credentials → <strong>OAuth 2.0 Client ID</strong> → Web application</li>
-          <li>Authorized JS origins: <code>your-app.pages.dev</code></li>
-          <li>Authorized redirect URIs: <code>your-app.pages.dev/</code></li>
+          <li>Authorized JavaScript origins: <code>https://sofia-notebook.pages.dev</code></li>
           <li>Copy the <strong>Client ID</strong> and paste below</li>
         </ol>
       </div>
       <div class="field" style="margin-top:14px">
         <label>Google OAuth Client ID</label>
         <input class="fi" id="gcal-client-id" placeholder="123456789-abc...apps.googleusercontent.com"/>
-        <div style="font-size:11px;color:var(--tl);margin-top:4px">No client secret needed — uses secure PKCE flow</div>
+        <div style="font-size:11px;color:var(--tl);margin-top:4px">Uses Google Identity Services — opens a secure popup, no redirect needed</div>
       </div>
     </div>
     <div class="modal-foot">
@@ -549,34 +589,24 @@
 <style>
 .fi { width:100%; padding:8px 11px; border:1px solid var(--border); border-radius:6px; background:var(--cream); font-family:'Source Sans 3',sans-serif; font-size:13px; color:var(--td); outline:none; transition:border-color .15s; }
 .fi:focus { border-color:var(--teal); }
+
+/* Schedule edit mode */
+.sched-date { display:block; font-size:10px; color:var(--tl); }
+.sched-pill-del { background:none; border:none; color:var(--rose); cursor:pointer; font-size:9px; padding:0 0 0 3px; vertical-align:middle; line-height:1; }
+.sched-add-cls-btn { background:none; border:1px dashed var(--teal); border-radius:3px; color:var(--teal-d); cursor:pointer; font-size:9px; padding:1px 5px; margin-top:3px; display:block; width:fit-content; font-family:'Source Sans 3',sans-serif; }
+.sched-add-cls-btn:hover { background:var(--teal-l); }
+.sched-del-week { background:none; border:none; color:var(--rose); cursor:pointer; font-size:13px; padding:3px; }
+
+/* Radio station edit */
+.radio-stn-wrap { display:inline-flex; align-items:center; gap:1px; }
+.radio-stn-del { background:none; border:none; color:var(--rose); cursor:pointer; font-size:10px; padding:0 2px; line-height:1; }
+.radio-edit-toggle { background:none; border:none; color:var(--tl); cursor:pointer; font-size:14px; padding:3px; border-radius:4px; transition:background .15s; }
+.radio-edit-toggle:hover { background:var(--border); }
+.radio-add-input { width:100%; padding:5px 8px; border:1px solid var(--border); border-radius:5px; background:var(--cream); font-family:'Source Sans 3',sans-serif; font-size:11px; color:var(--td); outline:none; }
+.radio-add-input:focus { border-color:var(--teal); }
 </style>
 
 <script src="app.js"></script>
-
-<!-- Planner budget snapshot (rendered after app.js loads) -->
-<script>
-window.addEventListener('load', () => {
-  // Render planner budget snapshot
-  function renderPlannerSnap() {
-    const el = document.getElementById('planner-bud-snap');
-    if (!el) return;
-    let inc = 0, exp = 0, sav = 0;
-    budget.forEach(b => { if (b.dir === 'income') inc += b.amount; else if (b.dir === 'expense') exp += b.amount; else sav += b.amount; });
-    const bal = inc - exp - sav;
-    el.innerHTML = `<div class="card-body" style="font-size:13px">
-      <div style="display:flex;justify-content:space-between;margin-bottom:6px"><span style="color:var(--tl)">Inkomst</span><span class="income-color">+${fmtKr(inc)}</span></div>
-      <div style="display:flex;justify-content:space-between;margin-bottom:6px"><span style="color:var(--tl)">Utgifter</span><span class="expense-color">-${fmtKr(exp + sav)}</span></div>
-      <div style="display:flex;justify-content:space-between;padding-top:6px;border-top:1px solid var(--border)"><span><strong>Balans</strong></span><span class="balance-color" style="font-weight:700">${fmtKr(bal)}</span></div>
-      <button class="btn-link" style="margin-top:10px;width:100%;text-align:center" onclick="nav('budget')">View full budget →</button>
-    </div>`;
-  }
-  setTimeout(renderPlannerSnap, 100);
-
-  // Init radio FAB
-  document.getElementById('radio-fab').addEventListener('click', () => { toggleRadio(); if (radioOpen) renderRadio(); });
-  renderScrapbook();
-});
-</script>
 
 </body>
 </html>
