@@ -8,6 +8,7 @@
   <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,600;1,400&family=Lora:ital,wght@0,400;0,500;1,400&family=Source+Sans+3:wght@300;400;600&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="style.css">
   <script src="https://accounts.google.com/gsi/client" async></script>
+  <script async defer src="//assets.pinterest.com/js/pinit.js"></script>
 </head>
 <body>
 
@@ -116,8 +117,13 @@
           <span class="mood-e" onclick="setMood('morning','🤩')">🤩</span>
         </div>
       </div>
+      <input type="text" class="journal-title-input" id="morning-title-input" placeholder="Give this entry a title... (optional)">
       <textarea class="journal-ta" id="morning-ta" placeholder="Write your morning thoughts..."></textarea>
-      <button class="btn-primary" onclick="saveJournalEntry('morning')">Save entry</button>
+      <div style="display:flex;align-items:center;gap:8px">
+        <button class="btn-primary" onclick="saveJournalEntry('morning')">Save entry</button>
+        <button class="btn-link" onclick="triggerJournalPhoto()" style="margin-left:8px">📷 Add Photo</button>
+      </div>
+      <div class="journal-photo-count" style="font-size:11px;color:var(--teal-d);margin-top:4px"></div>
     </div>
 
     <!-- Night -->
@@ -136,19 +142,29 @@
           <span class="mood-e" onclick="setMood('night','🤩')">🤩</span>
         </div>
       </div>
+      <input type="text" class="journal-title-input" id="night-title-input" placeholder="Give this entry a title... (optional)">
       <textarea class="journal-ta" id="night-ta" placeholder="Reflect on your day..."></textarea>
       <div class="grateful-section">
         <label>✨ Grateful for today</label>
         <textarea class="journal-ta" id="night-grateful" placeholder="I'm grateful for..." style="min-height:70px"></textarea>
       </div>
-      <button class="btn-primary" onclick="saveJournalEntry('night')">Save entry</button>
+      <div style="display:flex;align-items:center;gap:8px">
+        <button class="btn-primary" onclick="saveJournalEntry('night')">Save entry</button>
+        <button class="btn-link" onclick="triggerJournalPhoto()" style="margin-left:8px">📷 Add Photo</button>
+      </div>
+      <div class="journal-photo-count" style="font-size:11px;color:var(--teal-d);margin-top:4px"></div>
     </div>
 
     <!-- Thought -->
     <div class="journal-panel" id="jpanel-thought">
       <div class="journal-prompt">Quick thought, idea, or reminder.</div>
+      <input type="text" class="journal-title-input" id="thought-title-input" placeholder="Title or topic... (optional)">
       <textarea class="journal-ta" id="thought-ta" placeholder="Quick thought..."></textarea>
-      <button class="btn-primary" onclick="saveJournalEntry('thought')">Save thought</button>
+      <div style="display:flex;align-items:center;gap:8px">
+        <button class="btn-primary" onclick="saveJournalEntry('thought')">Save thought</button>
+        <button class="btn-link" onclick="triggerJournalPhoto()" style="margin-left:8px">📷 Add Photo</button>
+      </div>
+      <div class="journal-photo-count" style="font-size:11px;color:var(--teal-d);margin-top:4px"></div>
     </div>
 
     <div class="section-header" style="margin-top:24px">
@@ -370,6 +386,7 @@
               <button class="cal-nb" onclick="calNext()">›</button>
             </div>
             <div class="cal-grid" id="cal-grid-main"></div>
+            <div id="cal-events-list" style="margin-top:10px;font-size:12px"></div>
           </div>
         </div>
         <div class="section-header" style="margin-top:16px;margin-bottom:10px">Quick Links</div>
@@ -403,6 +420,15 @@
         <div class="section-header" style="margin-top:16px;margin-bottom:10px">Budget Snapshot</div>
         <div class="card" id="planner-bud-snap">
           <div class="card-body" style="font-size:13px;color:var(--tl)">Loading...</div>
+        </div>
+        <div class="section-header" style="margin-top:16px;margin-bottom:10px">
+          Pinterest Board
+          <button class="btn-link" onclick="openModal('m-pinterest')">⚙ Set Board</button>
+        </div>
+        <div class="card" id="pinterest-card">
+          <div class="card-body" id="pinterest-body">
+            <div class="gcal-widget-empty">No board set. Click "Set Board" to connect your Pinterest.</div>
+          </div>
         </div>
       </div>
     </div>
@@ -584,6 +610,7 @@
 <!-- Hidden file inputs -->
 <input type="file" id="profile-file" accept="image/*" style="display:none">
 <input type="file" id="scrap-file" accept="image/*" multiple style="display:none">
+<input type="file" id="journal-photo-file" accept="image/*" style="display:none" multiple>
 
 <!-- Inline styles for modal inputs (override .field) -->
 <style>
@@ -605,6 +632,54 @@
 .radio-add-input { width:100%; padding:5px 8px; border:1px solid var(--border); border-radius:5px; background:var(--cream); font-family:'Source Sans 3',sans-serif; font-size:11px; color:var(--td); outline:none; }
 .radio-add-input:focus { border-color:var(--teal); }
 </style>
+
+<!-- Add Calendar Event -->
+<div class="modal-bg" id="m-cal-event">
+  <div class="modal">
+    <div class="modal-head"><div class="modal-title">📅 Add Event</div><button class="modal-close" onclick="closeModal('m-cal-event')">✕</button></div>
+    <div class="modal-body">
+      <div class="field"><label>Date</label><input type="date" class="fi" id="mce-date"/></div>
+      <div class="field"><label>Event / Note</label><input class="fi" id="mce-title" placeholder="e.g. Doctor appointment"/></div>
+    </div>
+    <div class="modal-foot">
+      <button class="btn-secondary" onclick="closeModal('m-cal-event')">Cancel</button>
+      <button class="btn-primary" onclick="addCalEvent()">Add →</button>
+    </div>
+  </div>
+</div>
+
+<!-- Add Manual Calendar Event -->
+<div class="modal-bg" id="m-manual-gcal">
+  <div class="modal">
+    <div class="modal-head"><div class="modal-title">📅 Add Event</div><button class="modal-close" onclick="closeModal('m-manual-gcal')">✕</button></div>
+    <div class="modal-body">
+      <div class="field"><label>Event Title</label><input class="fi" id="mgcal-title" placeholder="e.g. Dentist appointment"/></div>
+      <div class="field-row">
+        <div class="field"><label>Date</label><input type="date" class="fi" id="mgcal-date"/></div>
+        <div class="field"><label>Time (optional)</label><input type="time" class="fi" id="mgcal-time"/></div>
+      </div>
+    </div>
+    <div class="modal-foot">
+      <button class="btn-secondary" onclick="closeModal('m-manual-gcal')">Cancel</button>
+      <button class="btn-primary" onclick="addManualGcalEvent()">Add →</button>
+    </div>
+  </div>
+</div>
+
+<!-- Pinterest Board Setup -->
+<div class="modal-bg" id="m-pinterest">
+  <div class="modal">
+    <div class="modal-head"><div class="modal-title">📌 Pinterest Board</div><button class="modal-close" onclick="closeModal('m-pinterest')">✕</button></div>
+    <div class="modal-body">
+      <div style="font-size:13px;color:var(--tm);margin-bottom:12px">Add your Pinterest board URL to display it here. The board must be public.</div>
+      <div class="field"><label>Pinterest Board URL</label><input class="fi" id="pin-url" placeholder="https://www.pinterest.com/username/board-name/"/></div>
+    </div>
+    <div class="modal-foot">
+      <button class="btn-secondary" onclick="closeModal('m-pinterest')">Cancel</button>
+      <button class="btn-primary" onclick="savePinterestBoard()">Save →</button>
+    </div>
+  </div>
+</div>
 
 <script src="app.js"></script>
 

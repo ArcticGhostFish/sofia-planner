@@ -81,6 +81,19 @@ let radioStations = S.get('radioStations') || [
 // Widget order
 let widgetOrder = S.get('widgetOrder') || ['nav', 'today', 'habits-today', 'budget-mini', 'calendar-widget', 'scrapbook'];
 
+// Calendar manual events
+let calManualEvents = S.get('calManualEvents') || [];
+let pendingCalDate = null;
+
+// Manual GCal events
+let manualGcalEvents = S.get('manualGcalEvents') || [];
+
+// Journal photos
+let pendingJournalPhotos = [];
+
+// Pinterest
+let pinterestBoardUrl = S.get('pinterestBoard') || '';
+
 // ===== UTILITIES =====
 function escHtml(s) {
   return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
@@ -223,11 +236,15 @@ function buildCalHtml(now) {
   for (let i = 0; i < dow; i++) html += `<div class="cal-day other-month"></div>`;
   for (let d = 1; d <= dim; d++) {
     const isT = d === now.getDate() && calM === now.getMonth() && calY === now.getFullYear();
-    const hasEv = gcalEvents.some(e => {
+    const hasManualEv = calManualEvents.some(e => {
+      const ed = new Date(e.date);
+      return ed.getDate() === d && ed.getMonth() === calM && ed.getFullYear() === calY;
+    });
+    const hasEv = hasManualEv || gcalEvents.some(e => {
       const ed = new Date(e.start?.dateTime || e.start?.date);
       return ed.getDate() === d && ed.getMonth() === calM && ed.getFullYear() === calY;
     });
-    html += `<div class="cal-day${isT ? ' today' : ''}${hasEv ? ' has-event' : ''}">${d}</div>`;
+    html += `<div class="cal-day${isT ? ' today' : ''}${hasEv ? ' has-event' : ''}" onclick="openAddCalEvent(${d},${calM},${calY})">${d}</div>`;
   }
   html += '</div>';
   return html;
@@ -311,6 +328,25 @@ document.getElementById && window.addEventListener('load', () => {
     });
     this.value = '';
   });
+
+  document.getElementById('journal-photo-file')?.addEventListener('change', function(e) {
+    const files = Array.from(e.target.files);
+    let done = 0;
+    files.forEach(f => {
+      const r = new FileReader();
+      r.onload = ev => {
+        pendingJournalPhotos.push(ev.target.result);
+        done++;
+        if (done === files.length) {
+          document.querySelectorAll('.journal-photo-count').forEach(el => {
+            el.textContent = pendingJournalPhotos.length ? `📷 ${pendingJournalPhotos.length} photo(s)` : '';
+          });
+        }
+      };
+      r.readAsDataURL(f);
+    });
+    this.value = '';
+  });
 });
 
 // ===== JOURNAL =====
@@ -362,20 +398,32 @@ function saveJournalEntry(type) {
   const ta = document.getElementById(`${type}-ta`);
   const content = ta ? ta.value.trim() : '';
   if (!content && type !== 'thought') return;
+  const titleInput = document.getElementById(`${type}-title-input`);
+  const customTitle = titleInput ? titleInput.value.trim() : '';
   const entry = {
     id: Date.now(),
-    title: type === 'morning' ? 'Morning \u00b7 ' + today : type === 'night' ? 'Night \u00b7 ' + today : content.slice(0, 40),
+    title: customTitle || (type === 'morning' ? 'Morning \u00b7 ' + today : type === 'night' ? 'Night \u00b7 ' + today : content.slice(0, 40)),
     date: today,
     type,
     mood: selectedMoods[type] || '',
     content,
-    grateful: type === 'night' ? (document.getElementById('night-grateful')?.value.trim() || '') : ''
+    grateful: type === 'night' ? (document.getElementById('night-grateful')?.value.trim() || '') : '',
+    photos: [...pendingJournalPhotos]
   };
   const idx = diary.findIndex(e => e.date === today && e.type === type);
   if (idx >= 0) diary[idx] = { ...diary[idx], ...entry };
   else diary.unshift(entry);
   S.set('diary', diary);
   if (ta) ta.value = '';
+  if (type === 'night') {
+    const grateful = document.getElementById('night-grateful');
+    if (grateful) grateful.value = '';
+  }
+  document.querySelectorAll(`#${type}-mood .mood-e`).forEach(e => e.classList.remove('selected'));
+  selectedMoods[type] = '';
+  if (titleInput) titleInput.value = '';
+  pendingJournalPhotos = [];
+  document.querySelectorAll('.journal-photo-count').forEach(el => { el.textContent = ''; });
   renderDiaryList();
   const btn = event?.target;
   if (btn) { const orig = btn.textContent; btn.textContent = 'Saved \u2713'; setTimeout(() => btn.textContent = orig, 1500); }
@@ -395,6 +443,7 @@ function renderDiaryList() {
         <span class="mood-tag ${moodClass(e.mood)}">${e.mood || ''} ${e.type || 'entry'}</span>
       </div>
       <div class="diary-preview">${escHtml((e.content || '').slice(0, 110))}${(e.content || '').length > 110 ? '\u2026' : ''}</div>
+      ${e.photos && e.photos.length ? `<div style="display:flex;gap:4px;padding:6px 14px;flex-wrap:wrap">${e.photos.map(p => `<img src="${p}" style="height:48px;width:48px;object-fit:cover;border-radius:4px;border:1px solid var(--border)">`).join('')}</div>` : ''}
     </div>
   `).join('') || '<div style="color:var(--tl);font-style:italic;font-size:13px">No entries yet.</div>';
 }
@@ -705,6 +754,7 @@ function renderPlanner() {
   renderCal();
   renderSchedule();
   renderPlannerBudgetSnap();
+  renderPinterestBoard();
 }
 
 function renderPlannerBudgetSnap() {
@@ -733,9 +783,31 @@ function renderCal() {
   for (let i = 0; i < dow; i++) html += `<div class="cal-day other-month"></div>`;
   for (let d = 1; d <= dim; d++) {
     const isT = d === now.getDate() && calM === now.getMonth() && calY === now.getFullYear();
-    html += `<div class="cal-day${isT ? ' today' : ''}">${d}</div>`;
+    const hasManualEv = calManualEvents.some(e => {
+      const ed = new Date(e.date);
+      return ed.getDate() === d && ed.getMonth() === calM && ed.getFullYear() === calY;
+    });
+    const hasEv = hasManualEv || gcalEvents.some(e => {
+      const ed = new Date(e.start?.dateTime || e.start?.date);
+      return ed.getDate() === d && ed.getMonth() === calM && ed.getFullYear() === calY;
+    });
+    html += `<div class="cal-day${isT ? ' today' : ''}${hasEv ? ' has-event' : ''}" onclick="openAddCalEvent(${d},${calM},${calY})">${d}</div>`;
   }
   el.innerHTML = html;
+
+  // Show month events below calendar
+  const monthEvents = calManualEvents.filter(e => {
+    const ed = new Date(e.date);
+    return ed.getMonth() === calM && ed.getFullYear() === calY;
+  });
+  const evEl = document.getElementById('cal-events-list');
+  if (evEl) {
+    evEl.innerHTML = monthEvents.length ? monthEvents.map(e =>
+      `<div class="cal-event-item"><span>📅 ${e.date.slice(5)} · ${escHtml(e.title)}</span>
+       <button onclick="removeCalEvent(${e.id})" style="background:none;border:none;color:var(--tl);cursor:pointer;font-size:11px">✕</button></div>`
+    ).join('') : '<div style="font-size:12px;color:var(--tl);font-style:italic">Click any day to add an event</div>';
+  }
+
   renderGCalEvents();
 }
 
@@ -1052,23 +1124,146 @@ async function fetchGCalEvents() {
 function renderGCalEvents() {
   const el = document.getElementById('gcal-events');
   if (!el) return;
+
+  let html = '';
+
+  // Manual events always shown
+  const today = new Date();
+  const upcomingManual = manualGcalEvents
+    .filter(e => new Date(e.date) >= today)
+    .sort((a, b) => a.date.localeCompare(b.date))
+    .slice(0, 5);
+
   if (!gcalToken) {
-    el.innerHTML = '<div class="gcal-widget-empty">Not connected. Click "\ud83d\udcc5 Google Cal" in sidebar to connect.</div>';
+    if (!upcomingManual.length) {
+      html = '<div class="gcal-widget-empty">Not connected. Add events manually or connect Google Cal in the sidebar.</div>';
+    }
+  } else {
+    if (!gcalEvents.length && !upcomingManual.length) {
+      html = '<div class="gcal-widget-empty">No upcoming events.</div>';
+    } else {
+      const upcoming = gcalEvents.filter(e => {
+        const d = new Date(e.start?.dateTime || e.start?.date);
+        return d >= today;
+      }).slice(0, 5);
+      html += upcoming.map(e => {
+        const start = new Date(e.start?.dateTime || e.start?.date);
+        const time = e.start?.dateTime
+          ? start.toLocaleTimeString('sv-SE', { hour: '2-digit', minute: '2-digit' })
+          : start.toLocaleDateString('sv-SE', { month: 'short', day: 'numeric' });
+        return `<div class="gcal-event"><div class="gcal-event-time">${time}</div><div class="gcal-event-title">${escHtml(e.summary || 'Event')}</div></div>`;
+      }).join('');
+    }
+  }
+
+  // Manual events
+  html += upcomingManual.map(e =>
+    `<div class="gcal-event" style="border-color:var(--warm)">
+      <div class="gcal-event-time">${e.date}${e.time ? ' · ' + e.time : ''}</div>
+      <div style="display:flex;align-items:center;justify-content:space-between">
+        <div class="gcal-event-title">${escHtml(e.title)}</div>
+        <button onclick="removeManualGcalEvent(${e.id})" style="background:none;border:none;color:var(--tl);cursor:pointer;font-size:10px">✕</button>
+      </div>
+    </div>`
+  ).join('');
+
+  html += `<button class="btn-link" style="width:100%;margin-top:8px;text-align:center;font-size:12px" onclick="openAddManualGcalEvent()">+ Add Event</button>`;
+
+  el.innerHTML = html;
+}
+
+// ===== CALENDAR MANUAL EVENTS =====
+function openAddCalEvent(day, month, year) {
+  pendingCalDate = { day, month, year };
+  const dateStr = `${year}-${String(month+1).padStart(2,'0')}-${String(day).padStart(2,'0')}`;
+  document.getElementById('mce-date').value = dateStr;
+  document.getElementById('mce-title').value = '';
+  openModal('m-cal-event');
+}
+
+function addCalEvent() {
+  const title = document.getElementById('mce-title').value.trim();
+  const date = document.getElementById('mce-date').value;
+  if (!title || !date) return;
+  calManualEvents.push({ id: Date.now(), date, title });
+  S.set('calManualEvents', calManualEvents);
+  closeModal('m-cal-event');
+  renderCal();
+  renderWidgets();
+}
+
+function removeCalEvent(id) {
+  calManualEvents = calManualEvents.filter(e => e.id !== id);
+  S.set('calManualEvents', calManualEvents);
+  renderCal();
+  renderWidgets();
+}
+
+// ===== MANUAL GCAL EVENTS =====
+function openAddManualGcalEvent() {
+  document.getElementById('mgcal-title').value = '';
+  document.getElementById('mgcal-date').value = new Date().toLocaleDateString('sv-SE');
+  document.getElementById('mgcal-time').value = '';
+  openModal('m-manual-gcal');
+}
+
+function addManualGcalEvent() {
+  const title = document.getElementById('mgcal-title').value.trim();
+  const date = document.getElementById('mgcal-date').value;
+  const time = document.getElementById('mgcal-time').value;
+  if (!title || !date) return;
+  manualGcalEvents.push({ id: Date.now(), title, date, time });
+  S.set('manualGcalEvents', manualGcalEvents);
+  closeModal('m-manual-gcal');
+  renderGCalEvents();
+}
+
+function removeManualGcalEvent(id) {
+  manualGcalEvents = manualGcalEvents.filter(e => e.id !== id);
+  S.set('manualGcalEvents', manualGcalEvents);
+  renderGCalEvents();
+}
+
+// ===== PINTEREST =====
+function savePinterestBoard() {
+  const url = document.getElementById('pin-url').value.trim();
+  if (!url) return;
+  pinterestBoardUrl = url;
+  S.set('pinterestBoard', url);
+  closeModal('m-pinterest');
+  renderPinterestBoard();
+}
+
+function renderPinterestBoard() {
+  const el = document.getElementById('pinterest-body');
+  if (!el) return;
+  if (!pinterestBoardUrl) {
+    el.innerHTML = '<div class="gcal-widget-empty">No board set. Click "Set Board" to connect your Pinterest.</div>';
     return;
   }
-  if (!gcalEvents.length) { el.innerHTML = '<div class="gcal-widget-empty">No upcoming events.</div>'; return; }
-  const today = new Date();
-  const upcoming = gcalEvents.filter(e => {
-    const d = new Date(e.start?.dateTime || e.start?.date);
-    return d >= today;
-  }).slice(0, 5);
-  el.innerHTML = upcoming.map(e => {
-    const start = new Date(e.start?.dateTime || e.start?.date);
-    const time = e.start?.dateTime
-      ? start.toLocaleTimeString('sv-SE', { hour: '2-digit', minute: '2-digit' })
-      : start.toLocaleDateString('sv-SE', { month: 'short', day: 'numeric' });
-    return `<div class="gcal-event"><div class="gcal-event-time">${time}</div><div class="gcal-event-title">${escHtml(e.summary || 'Event')}</div></div>`;
-  }).join('');
+  el.innerHTML = `
+    <a href="${escHtml(pinterestBoardUrl)}" target="_blank"
+       style="display:flex;align-items:center;gap:8px;text-decoration:none;color:var(--td);font-size:13px;padding:8px 0">
+      <span style="font-size:20px">📌</span>
+      <div>
+        <div style="font-weight:600">View Pinterest Board</div>
+        <div style="font-size:11px;color:var(--tl)">${escHtml(pinterestBoardUrl.replace('https://www.pinterest.com/','').replace(/\/$/,''))}</div>
+      </div>
+      <span style="margin-left:auto;color:var(--tl)">→</span>
+    </a>
+    <a data-pin-do="embedBoard"
+       data-pin-board-width="220"
+       data-pin-scale-height="180"
+       data-pin-scale-width="60"
+       href="${escHtml(pinterestBoardUrl)}">
+    </a>
+  `;
+  if (window.PinUtils) window.PinUtils.build();
+}
+
+// ===== JOURNAL PHOTOS =====
+function triggerJournalPhoto() {
+  document.getElementById('journal-photo-file').click();
 }
 
 // ===== MODALS =====
@@ -1107,5 +1302,6 @@ window.addEventListener('load', () => {
   document.getElementById('radio-fab').addEventListener('click', () => { toggleRadio(); if (radioOpen) renderRadio(); });
 
   renderScrapbook();
+  renderPinterestBoard();
   nav('home');
 });
