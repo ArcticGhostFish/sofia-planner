@@ -12,7 +12,23 @@
 </head>
 <body>
 
+<!-- ===== SEARCH OVERLAY ===== -->
+<div id="search-overlay" class="search-overlay">
+  <div class="search-box">
+    <div class="search-input-row">
+      <span style="font-size:18px;color:var(--tl)">🔍</span>
+      <input type="text" id="search-input" class="search-fi" placeholder="Search notes, exams, diary..." oninput="performSearch(this.value)" autocomplete="off">
+      <button onclick="closeSearch()" style="background:none;border:none;color:var(--tl);cursor:pointer;font-size:16px;padding:4px">✕</button>
+    </div>
+    <div id="search-results" class="search-results"></div>
+    <div class="search-hint">Ctrl+K to open · Esc to close</div>
+  </div>
+</div>
+
 <div id="app" style="display:flex;width:100%;height:100vh;overflow:hidden">
+
+<!-- ===== HAMBURGER (mobile) ===== -->
+<button id="hamburger-btn" onclick="toggleSidebar()" title="Menu">☰</button>
 
 <!-- ===== SIDEBAR ===== -->
 <nav id="sidebar">
@@ -26,6 +42,10 @@
     </div>
   </div>
 
+  <div class="sb-search-row">
+    <button class="sb-search-btn" onclick="openSearch()">🔍 Search&hellip; <kbd>Ctrl+K</kbd></button>
+  </div>
+
   <div class="sb-nav">
     <div class="sb-section">
       <div class="sb-item active" data-view="home"><span class="sb-icon">🏠</span> Hem</div>
@@ -34,22 +54,23 @@
       <div class="sb-item" data-view="budget"><span class="sb-icon">💰</span> Budget</div>
       <div class="sb-item" data-view="study"><span class="sb-icon">📚</span> Study Hub</div>
       <div class="sb-item" data-view="notes"><span class="sb-icon">📝</span> Notes</div>
+      <div class="sb-item" data-view="tasks"><span class="sb-icon">✅</span> Tasks</div>
       <div class="sb-item" data-view="planner"><span class="sb-icon">📅</span> Life Planner</div>
+      <div class="sb-item" data-view="scrapbook"><span class="sb-icon">🖼</span> Scrapbook</div>
     </div>
     <div class="sb-section">
       <div class="sb-label">Senaste anteckningar</div>
       <div id="sb-recent-notes"></div>
-    </div>
-    <div class="sb-section">
-      <div class="sb-label">Privat</div>
-      <div class="sb-item" data-view="journal"><span class="sb-icon">📖</span> Historik-Journal</div>
-      <div class="sb-item" data-view="home"><span class="sb-icon">🖼</span> Scrapbook</div>
     </div>
   </div>
 
   <div class="sb-footer">
     <div id="sb-date"></div>
     <button class="sb-gcal-btn" id="sb-gcal-btn" onclick="toggleGCal()">📅 Google Cal</button>
+    <button class="sb-gcal-btn" id="sb-pin-btn" onclick="openPinterestFromSidebar()">📌 Pinterest</button>
+    <button class="sb-gcal-btn" id="dark-mode-btn" onclick="toggleDarkMode()">🌙 Dark</button>
+    <button class="sb-gcal-btn" onclick="exportData()">💾 Backup</button>
+    <label class="sb-gcal-btn" style="cursor:pointer">📥 Restore <input type="file" accept=".json" style="display:none" onchange="importData(this)"></label>
   </div>
 </nav>
 
@@ -58,7 +79,8 @@
 
 <!-- ────────────────── HOME ────────────────── -->
 <div class="view active" id="view-home">
-  <div class="view-hero h-water">
+  <div class="view-hero h-water" id="hero-home">
+    <button class="hero-edit-btn" onclick="setHeaderImage('home')">✎ Edit header</button>
     <div class="hero-overlay">
       <div class="hero-content">
         <div class="hero-profile" id="hero-profile" onclick="triggerProfilePhoto()">
@@ -77,18 +99,18 @@
       <button class="btn-secondary" onclick="toggleEditMode()">✦ Customize</button>
     </div>
     <div id="widget-grid" class="widget-grid"></div>
-
-    <div class="section-header" style="margin-top:28px">
-      ✨ Scrapbook
-      <button class="btn-link" onclick="addScrap()">+ Add Photo</button>
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-top:28px;margin-bottom:8px">
+      <h3 style="margin:0;font-family:'Playfair Display',serif;font-size:18px;color:var(--td)">Mood Board</h3>
+      <button class="btn-link" onclick="openAddMoodImage()">+ Add Image</button>
     </div>
-    <div class="scrapbook-grid" id="scrapbook-main"></div>
+    <div id="dash-moodboard" class="dash-moodboard"></div>
   </div>
 </div>
 
 <!-- ────────────────── JOURNAL ────────────────── -->
 <div class="view" id="view-journal">
-  <div class="view-hero h-diary">
+  <div class="view-hero h-diary" id="hero-journal">
+    <button class="hero-edit-btn" onclick="setHeaderImage('journal')">✎ Edit header</button>
     <div class="page-icon">📓</div>
   </div>
   <div class="view-content">
@@ -167,6 +189,15 @@
       <div class="journal-photo-count" style="font-size:11px;color:var(--teal-d);margin-top:4px"></div>
     </div>
 
+    <!-- Mood trend chart -->
+    <div id="mood-chart-wrap" style="margin-top:20px;margin-bottom:4px;display:none">
+      <div class="section-header" style="margin-bottom:8px">Mood Trend</div>
+      <div class="card" style="padding:12px 16px">
+        <canvas id="mood-chart-canvas" style="width:100%;height:80px;display:block"></canvas>
+        <div style="display:flex;justify-content:space-between;font-size:10px;color:var(--tl);margin-top:4px"><span>30 days ago</span><span>Today</span></div>
+      </div>
+    </div>
+
     <div class="section-header" style="margin-top:24px">
       Past Entries
       <button class="btn-link" onclick="openModal('m-diary')">+ New Full Entry</button>
@@ -203,12 +234,15 @@
 
 <!-- ────────────────── HABITS ────────────────── -->
 <div class="view" id="view-habits">
-  <div class="view-hero h-habits"><div class="page-icon">✓</div></div>
+  <div class="view-hero h-habits" id="hero-habits"><button class="hero-edit-btn" onclick="setHeaderImage('habits')">✎ Edit header</button><div class="page-icon">✓</div></div>
   <div class="view-content">
     <h2 class="view-title">Habits</h2>
     <div class="pmeta" id="habits-week-lbl"></div>
     <div class="section-header">
-      Weekly Tracker
+      <div style="display:flex;align-items:center;gap:8px">
+        <button id="habit-view-weekly" class="cal-view-btn active" onclick="setHabitView('weekly')">Weekly</button>
+        <button id="habit-view-heatmap" class="cal-view-btn" onclick="setHabitView('heatmap')">Heatmap</button>
+      </div>
       <div style="display:flex;gap:6px;align-items:center">
         <button class="btn-secondary" style="padding:3px 8px;font-size:11px" onclick="hWeek(-1)">‹</button>
         <button class="btn-secondary" style="padding:3px 8px;font-size:11px" onclick="hWeek(1)">›</button>
@@ -225,7 +259,7 @@
 
 <!-- ────────────────── BUDGET ────────────────── -->
 <div class="view" id="view-budget">
-  <div class="view-hero h-budget"><div class="page-icon">💰</div></div>
+  <div class="view-hero h-budget" id="hero-budget"><button class="hero-edit-btn" onclick="setHeaderImage('budget')">✎ Edit header</button><div class="page-icon">💰</div></div>
   <div class="view-content">
     <h2 class="view-title">Budget – Lön & Räkningar</h2>
     <div class="pmeta">Mars 2026</div>
@@ -251,14 +285,20 @@
 
 <!-- ────────────────── STUDY HUB ────────────────── -->
 <div class="view" id="view-study">
-  <div class="view-hero h-study"><div class="page-icon">📚</div></div>
+  <div class="view-hero h-study" id="hero-study"><button class="hero-edit-btn" onclick="setHeaderImage('study')">✎ Edit header</button><div class="page-icon">📚</div></div>
   <div class="view-content">
-    <h2 class="view-title">Study Hub</h2>
-    <div class="pmeta">Tools & resources for focused studying</div>
-    <div class="study-grid">
-      <!-- Pomodoro -->
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px">
+      <h2 class="view-title" style="margin-bottom:0">Study Hub</h2>
+      <div style="display:flex;gap:8px">
+        <button class="btn-secondary" onclick="togglePomCard()">🍅 Timer</button>
+        <button class="btn-secondary" onclick="toggleToolsCard()">📎 Tools</button>
+      </div>
+    </div>
+
+    <!-- Pomodoro (collapsible) -->
+    <div id="pom-inline-card" style="display:none;margin-bottom:20px">
       <div class="card">
-        <div class="card-head">🍅 Pomodoro Timer</div>
+        <div class="card-head" style="display:flex;align-items:center">🍅 Pomodoro Timer <button onclick="togglePomCard()" style="background:none;border:none;cursor:pointer;color:var(--tl);margin-left:auto;font-size:14px">✕</button></div>
         <div class="pom-wrap">
           <div class="pom-modes">
             <button class="pom-mode-btn active" onclick="pomMode('work',25,this)">Focus 25m</button>
@@ -285,40 +325,36 @@
           </div>
           <div class="pom-stats">
             <div class="pom-stat"><strong id="pom-ses">0</strong>Sessions today</div>
-            <div class="pom-stat"><strong id="pom-mins">0m</strong>Focused</div>
+            <div class="pom-stat"><strong id="pom-mins">0m</strong>Focused today</div>
           </div>
+          <div id="pom-weekly-stats" style="margin-top:10px;padding-top:10px;border-top:1px solid var(--border);font-size:11px;color:var(--tl);text-align:center"></div>
         </div>
       </div>
-      <!-- Study resources -->
+    </div>
+
+    <!-- Tools (collapsible) -->
+    <div id="tools-inline-card" style="display:none;margin-bottom:20px">
       <div class="card">
-        <div class="card-head">📎 Study Resources</div>
+        <div class="card-head" style="display:flex;align-items:center">📎 Study Resources <button onclick="toggleToolsCard()" style="background:none;border:none;cursor:pointer;color:var(--tl);margin-left:auto;font-size:14px">✕</button></div>
         <div class="study-links">
-          <a href="https://otter.ai" target="_blank" class="study-link">
-            <span class="sl-icon">🎙️</span><div><div class="sl-name">Otter.ai</div><div class="sl-desc">Live transcription & meeting notes</div></div><span class="sl-arr">→</span>
-          </a>
-          <a href="https://notebooklm.google.com" target="_blank" class="study-link">
-            <span class="sl-icon">📖</span><div><div class="sl-name">Notebook LM</div><div class="sl-desc">AI-powered study notes by Google</div></div><span class="sl-arr">→</span>
-          </a>
-          <a href="https://ankiweb.net" target="_blank" class="study-link">
-            <span class="sl-icon">🃏</span><div><div class="sl-name">Anki Web</div><div class="sl-desc">Spaced repetition flashcards</div></div><span class="sl-arr">→</span>
-          </a>
-          <a href="https://claude.ai" target="_blank" class="study-link">
-            <span class="sl-icon">🤖</span><div><div class="sl-name">Claude AI</div><div class="sl-desc">Explain concepts, review notes</div></div><span class="sl-arr">→</span>
-          </a>
-          <a href="https://itslearning.com" target="_blank" class="study-link">
-            <span class="sl-icon">🎓</span><div><div class="sl-name">ITSLEARNING</div><div class="sl-desc">Course platform</div></div><span class="sl-arr">→</span>
-          </a>
-          <a href="https://www.khanacademy.org" target="_blank" class="study-link">
-            <span class="sl-icon">🧪</span><div><div class="sl-name">Khan Academy</div><div class="sl-desc">Free chemistry & biology courses</div></div><span class="sl-arr">→</span>
-          </a>
+          <a href="https://otter.ai" target="_blank" class="study-link"><span class="sl-icon">🎙️</span><div><div class="sl-name">Otter.ai</div><div class="sl-desc">Live transcription & meeting notes</div></div><span class="sl-arr">→</span></a>
+          <a href="https://notebooklm.google.com" target="_blank" class="study-link"><span class="sl-icon">📖</span><div><div class="sl-name">Notebook LM</div><div class="sl-desc">AI-powered study notes by Google</div></div><span class="sl-arr">→</span></a>
+          <a href="https://ankiweb.net" target="_blank" class="study-link"><span class="sl-icon">🃏</span><div><div class="sl-name">Anki Web</div><div class="sl-desc">Spaced repetition flashcards</div></div><span class="sl-arr">→</span></a>
+          <a href="https://claude.ai" target="_blank" class="study-link"><span class="sl-icon">🤖</span><div><div class="sl-name">Claude AI</div><div class="sl-desc">Explain concepts, review notes</div></div><span class="sl-arr">→</span></a>
+          <a href="https://itslearning.com" target="_blank" class="study-link"><span class="sl-icon">🎓</span><div><div class="sl-name">ITSLEARNING</div><div class="sl-desc">Course platform</div></div><span class="sl-arr">→</span></a>
+          <a href="https://www.khanacademy.org" target="_blank" class="study-link"><span class="sl-icon">🧪</span><div><div class="sl-name">Khan Academy</div><div class="sl-desc">Free courses</div></div><span class="sl-arr">→</span></a>
         </div>
       </div>
     </div>
-    <div class="section-header">
-      📝 Class Notes
-      <button class="btn-link" onclick="openNewNote()">+ New Cornell Note</button>
+
+    <!-- Class tabs -->
+    <div class="class-tabs-row" id="class-tabs-row">
+      <div id="class-tabs-list" style="display:flex;gap:8px;flex-wrap:wrap;flex:1;align-items:center"></div>
+      <button class="btn-link" onclick="openModal('m-add-class')">+ Add Class</button>
     </div>
-    <div class="card"><div class="card-body"><div id="study-notes-list"></div></div></div>
+
+    <!-- Class content area -->
+    <div id="class-content-area"></div>
   </div>
 </div>
 
@@ -326,11 +362,14 @@
 <div class="view" id="view-notes">
   <div class="view-hero h-water"><div class="page-icon">📝</div></div>
   <div class="view-content">
-    <h2 class="view-title">Notes</h2>
-    <div class="pmeta">Cornell-style class notes</div>
-    <div class="section-header">
-      All Notes
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px">
+      <h2 class="view-title" style="margin-bottom:0">Notes</h2>
       <button class="btn-link" onclick="openNewNote()">+ New Note</button>
+    </div>
+    <div class="pmeta">Notes are organized by class — browse below or search</div>
+    <div class="notes-search-bar">
+      <input type="text" id="notes-search" class="notes-search-input" placeholder="🔍 Search notes by title, content, or class..." oninput="notesSearch(this.value)">
+      <button onclick="notesSearch('');document.getElementById('notes-search').value=''" class="notes-search-clear" id="notes-search-clear">✕</button>
     </div>
     <div class="notes-grid" id="notes-grid"></div>
   </div>
@@ -341,7 +380,7 @@
   <div class="view-hero h-water"><div class="page-icon">📝</div></div>
   <div class="view-content">
     <div style="display:flex;align-items:center;gap:10px;margin-bottom:6px">
-      <button class="back-btn" onclick="nav('notes')">← Notes</button>
+      <button class="back-btn" onclick="navFromNote()">← Back</button>
       <span class="note-tag-badge" id="note-tag">Class</span>
     </div>
     <div class="view-title" id="note-title" contenteditable="true" style="outline:none;margin-bottom:12px">Untitled Note</div>
@@ -353,16 +392,17 @@
     <div style="display:grid;grid-template-columns:160px 1fr;font-size:9px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--tl);margin-bottom:4px">
       <div>Cues / Keywords</div><div style="padding-left:14px">Notes</div>
     </div>
+    <div id="note-autosave-indicator" style="font-size:12px;color:var(--teal-d);margin-bottom:8px;min-height:18px"></div>
     <div class="cornell-body">
       <div class="cornell-cues"><div class="cornell-label">🔑 Key Terms</div>
-        <textarea class="cornell-ta" id="note-cues" placeholder="• Keywords&#10;• Questions&#10;• Formulas"></textarea></div>
+        <textarea class="cornell-ta" id="note-cues" placeholder="• Keywords&#10;• Questions&#10;• Formulas" oninput="scheduleNoteAutosave()"></textarea></div>
       <div class="cornell-notes"><div class="cornell-label">📝 Main Notes</div>
-        <textarea class="cornell-ta" id="note-notes" placeholder="Write lecture notes here..."></textarea></div>
+        <textarea class="cornell-ta" id="note-notes" placeholder="Write lecture notes here..." oninput="scheduleNoteAutosave()"></textarea></div>
       <div class="cornell-summary"><div class="cornell-label">💡 Summary</div>
-        <textarea class="cornell-ta sm" id="note-summary" placeholder="Key takeaways in your own words..."></textarea></div>
+        <textarea class="cornell-ta sm" id="note-summary" placeholder="Key takeaways in your own words..." oninput="scheduleNoteAutosave()"></textarea></div>
     </div>
     <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:14px">
-      <button class="btn-secondary" onclick="nav('notes')">Cancel</button>
+      <button class="btn-secondary" onclick="navFromNote()">← Back</button>
       <button class="btn-primary" onclick="saveNote()">Save Note ✓</button>
     </div>
   </div>
@@ -370,14 +410,21 @@
 
 <!-- ────────────────── LIFE PLANNER ────────────────── -->
 <div class="view" id="view-planner">
-  <div class="view-hero h-life"><div class="page-icon">📅</div></div>
+  <div class="view-hero h-life" id="hero-planner"><button class="hero-edit-btn" onclick="setHeaderImage('planner')">✎ Edit header</button><div class="page-icon">📅</div></div>
   <div class="view-content">
     <h2 class="view-title">Life Planner</h2>
     <div class="pmeta">Monthly overview · Mars 2026</div>
     <div class="planner-layout">
       <!-- Calendar column -->
       <div>
-        <div class="section-header" style="margin-bottom:10px">Monthly Planner</div>
+        <div class="section-header" style="margin-bottom:10px">
+          Planner
+          <div style="display:flex;gap:4px">
+            <button id="cal-view-month" class="cal-view-btn active" onclick="setCalView('month')">Month</button>
+            <button id="cal-view-week" class="cal-view-btn" onclick="setCalView('week')">Week</button>
+            <button id="cal-view-day" class="cal-view-btn" onclick="setCalView('day')">Day</button>
+          </div>
+        </div>
         <div class="card">
           <div class="card-body">
             <div class="cal-nav">
@@ -385,7 +432,7 @@
               <div class="cal-title" id="cal-title-main">Mars 2026</div>
               <button class="cal-nb" onclick="calNext()">›</button>
             </div>
-            <div class="cal-grid" id="cal-grid-main"></div>
+            <div id="cal-grid-main"></div>
             <div id="cal-events-list" style="margin-top:10px;font-size:12px"></div>
           </div>
         </div>
@@ -432,6 +479,41 @@
         </div>
       </div>
     </div>
+  </div>
+</div>
+
+<!-- ────────────────── TASKS ────────────────── -->
+<div class="view" id="view-tasks">
+  <div class="view-hero h-habits" id="hero-tasks"><div class="page-icon">✅</div></div>
+  <div class="view-content">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px">
+      <h2 class="view-title" style="margin-bottom:0">Tasks</h2>
+      <button class="btn-primary" onclick="openModal('m-add-task')">+ New Task</button>
+    </div>
+    <div class="section-header">
+      All Tasks
+      <select id="task-filter" class="task-filter-sel" onchange="renderTasks()">
+        <option value="all">All</option>
+        <option value="active">Active</option>
+        <option value="done">Completed</option>
+      </select>
+    </div>
+    <div id="tasks-list"></div>
+  </div>
+</div>
+
+<!-- ────────────────── SCRAPBOOK ────────────────── -->
+<div class="view" id="view-scrapbook">
+  <div class="view-hero h-water" id="hero-scrapbook">
+    <button class="hero-edit-btn" onclick="setHeaderImage('scrapbook')">✎ Edit header</button>
+    <div class="page-icon">🖼</div>
+  </div>
+  <div class="view-content">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px">
+      <h2 class="view-title">Scrapbook</h2>
+      <button class="btn-primary" onclick="openAddScrapPhoto()">+ Add Photo</button>
+    </div>
+    <div id="scrapbook-grid" class="scrapbook-grid"></div>
   </div>
 </div>
 
@@ -638,8 +720,26 @@
   <div class="modal">
     <div class="modal-head"><div class="modal-title">📅 Add Event</div><button class="modal-close" onclick="closeModal('m-cal-event')">✕</button></div>
     <div class="modal-body">
-      <div class="field"><label>Date</label><input type="date" class="fi" id="mce-date"/></div>
       <div class="field"><label>Event / Note</label><input class="fi" id="mce-title" placeholder="e.g. Doctor appointment"/></div>
+      <div class="field-row">
+        <div class="field"><label>Date</label><input type="date" class="fi" id="mce-date"/></div>
+        <div class="field"><label>Time (optional)</label><input type="time" class="fi" id="mce-time"/></div>
+      </div>
+      <div class="field-row">
+        <div class="field"><label>Repeat</label>
+          <select class="fi" id="mce-recurrence">
+            <option value="none">No repeat</option>
+            <option value="daily">Daily (12×)</option>
+            <option value="weekly">Weekly (12×)</option>
+            <option value="monthly">Monthly (12×)</option>
+          </select>
+        </div>
+        <div class="field"><label>Class (optional)</label>
+          <select class="fi" id="mce-class">
+            <option value="">None</option>
+          </select>
+        </div>
+      </div>
     </div>
     <div class="modal-foot">
       <button class="btn-secondary" onclick="closeModal('m-cal-event')">Cancel</button>
@@ -666,6 +766,118 @@
   </div>
 </div>
 
+<!-- Add Class -->
+<div class="modal-bg" id="m-add-class">
+  <div class="modal">
+    <div class="modal-head"><div class="modal-title">+ New Class</div><button class="modal-close" onclick="closeModal('m-add-class')">✕</button></div>
+    <div class="modal-body">
+      <div class="field-row">
+        <div class="field" style="flex:1"><label>Class Name</label><input class="fi" id="ac-name" placeholder="e.g. Organisk Kemi"/></div>
+        <div class="field" style="width:80px"><label>Emoji</label><input class="fi" id="ac-emoji" placeholder="📚" maxlength="2"/></div>
+        <div class="field" style="width:60px"><label>Color</label><input type="color" id="ac-color" value="#0d9488" style="width:100%;height:36px;padding:2px;border:1px solid var(--border);border-radius:6px;cursor:pointer"/></div>
+      </div>
+      <div class="field-row">
+        <div class="field"><label>Professor</label><input class="fi" id="ac-professor" placeholder="Dr. Svensson"/></div>
+        <div class="field"><label>Email</label><input class="fi" id="ac-prof-email" placeholder="prof@uni.se" type="email"/></div>
+      </div>
+      <div class="field-row">
+        <div class="field"><label>Office Hours</label><input class="fi" id="ac-office-hours" placeholder="Mon 13–15"/></div>
+        <div class="field"><label>Room</label><input class="fi" id="ac-room" placeholder="B204"/></div>
+      </div>
+      <div class="field"><label>Semester</label><input class="fi" id="ac-semester" placeholder="HT 2026"/></div>
+    </div>
+    <div class="modal-foot">
+      <button class="btn-secondary" onclick="closeModal('m-add-class')">Cancel</button>
+      <button class="btn-primary" onclick="addClass()">Add Class →</button>
+    </div>
+  </div>
+</div>
+
+<!-- Add Exam -->
+<div class="modal-bg" id="m-add-exam">
+  <div class="modal">
+    <div class="modal-head"><div class="modal-title">+ Add Exam / Deadline</div><button class="modal-close" onclick="closeModal('m-add-exam')">✕</button></div>
+    <div class="modal-body">
+      <div class="field"><label>Title</label><input class="fi" id="ae-title" placeholder="e.g. Midterm exam"/></div>
+      <div class="field"><label>Date</label><input class="fi" id="ae-date" type="date"/></div>
+    </div>
+    <div class="modal-foot">
+      <button class="btn-secondary" onclick="closeModal('m-add-exam')">Cancel</button>
+      <button class="btn-primary" onclick="addExam()">Add →</button>
+    </div>
+  </div>
+</div>
+
+<!-- Add Grade -->
+<div class="modal-bg" id="m-add-grade">
+  <div class="modal">
+    <div class="modal-head"><div class="modal-title">+ Add Grade</div><button class="modal-close" onclick="closeModal('m-add-grade')">✕</button></div>
+    <div class="modal-body">
+      <div class="field"><label>Task / Assignment</label><input class="fi" id="ag-task" placeholder="e.g. Lab Report"/></div>
+      <div class="field-row">
+        <div class="field"><label>Grade (%)</label><input class="fi" id="ag-grade" type="number" min="0" max="100" placeholder="85"/></div>
+        <div class="field"><label>Weight (%)</label><input class="fi" id="ag-weight" type="number" min="0" max="100" placeholder="20"/></div>
+      </div>
+    </div>
+    <div class="modal-foot">
+      <button class="btn-secondary" onclick="closeModal('m-add-grade')">Cancel</button>
+      <button class="btn-primary" onclick="addGrade()">Add →</button>
+    </div>
+  </div>
+</div>
+
+<!-- Add Task -->
+<div class="modal-bg" id="m-add-task">
+  <div class="modal">
+    <div class="modal-head"><div class="modal-title">✅ New Task</div><button class="modal-close" onclick="closeModal('m-add-task')">✕</button></div>
+    <div class="modal-body">
+      <div class="field"><label>Task</label><input class="fi" id="mt-title" placeholder="e.g. Study chapter 4"/></div>
+      <div class="field-row">
+        <div class="field"><label>Priority</label>
+          <select class="fi" id="mt-priority">
+            <option value="none">None</option>
+            <option value="high">🔴 High</option>
+            <option value="medium">🟡 Medium</option>
+            <option value="low">🟢 Low</option>
+          </select>
+        </div>
+        <div class="field"><label>Due Date</label><input type="date" class="fi" id="mt-due"/></div>
+      </div>
+      <div class="field"><label>Class (optional)</label>
+        <select class="fi" id="mt-class">
+          <option value="">No class</option>
+        </select>
+      </div>
+      <div class="field"><label>Subtasks (one per line)</label>
+        <textarea class="fi" id="mt-subtasks" placeholder="Read sections 1–3&#10;Write summary&#10;Review flashcards" style="min-height:70px"></textarea>
+      </div>
+    </div>
+    <div class="modal-foot">
+      <button class="btn-secondary" onclick="closeModal('m-add-task')">Cancel</button>
+      <button class="btn-primary" onclick="addTask()">Add →</button>
+    </div>
+  </div>
+</div>
+
+<!-- Photo Input (file or URL) -->
+<div class="modal-bg" id="m-photo-input">
+  <div class="modal">
+    <div class="modal-head"><div class="modal-title">📷 Add Photo</div><button class="modal-close" onclick="closeModal('m-photo-input')">✕</button></div>
+    <div class="modal-body">
+      <div class="field">
+        <label>From a URL (paste image link)</label>
+        <input class="fi" id="photo-url-input" placeholder="https://example.com/image.jpg"/>
+        <button class="btn-primary" style="margin-top:8px;width:100%" onclick="addPhotoFromUrl()">Add from URL</button>
+      </div>
+      <div style="text-align:center;color:var(--tl);font-size:13px;margin:12px 0">— or —</div>
+      <div class="field">
+        <label>From your computer</label>
+        <button class="btn-secondary" style="width:100%" onclick="document.getElementById('journal-photo-file').click()">Choose file</button>
+      </div>
+    </div>
+  </div>
+</div>
+
 <!-- Pinterest Board Setup -->
 <div class="modal-bg" id="m-pinterest">
   <div class="modal">
@@ -677,6 +889,65 @@
     <div class="modal-foot">
       <button class="btn-secondary" onclick="closeModal('m-pinterest')">Cancel</button>
       <button class="btn-primary" onclick="savePinterestBoard()">Save →</button>
+    </div>
+  </div>
+</div>
+
+<!-- Header Image Modal -->
+<div class="modal-bg" id="m-header-image">
+  <div class="modal">
+    <div class="modal-head"><div class="modal-title">✎ Edit Page Header</div><button class="modal-close" onclick="closeModal('m-header-image')">✕</button></div>
+    <div class="modal-body">
+      <div class="field">
+        <label>Header Size</label>
+        <div style="display:flex;gap:8px;margin-top:4px">
+          <button class="hero-size-btn btn-secondary" data-sz="sm" onclick="setHeroSize('sm')" style="flex:1">Small<br><span style="font-size:10px;color:var(--tl)">160px</span></button>
+          <button class="hero-size-btn btn-secondary" data-sz="md" onclick="setHeroSize('md')" style="flex:1">Medium<br><span style="font-size:10px;color:var(--tl)">260px</span></button>
+          <button class="hero-size-btn btn-secondary" data-sz="lg" onclick="setHeroSize('lg')" style="flex:1">Large<br><span style="font-size:10px;color:var(--tl)">380px</span></button>
+        </div>
+      </div>
+      <div class="field">
+        <label>Paste an image URL</label>
+        <input class="fi" id="hi-url" placeholder="https://example.com/photo.jpg"/>
+      </div>
+      <div style="text-align:center;color:var(--tl);font-size:13px;margin:10px 0">— or —</div>
+      <div class="field">
+        <label>Upload from your computer</label>
+        <button class="btn-secondary" style="width:100%" onclick="document.getElementById('hi-file').click()">Choose file</button>
+        <input type="file" id="hi-file" accept="image/*" style="display:none" onchange="handleHeaderFileUpload(this)">
+      </div>
+    </div>
+    <div class="modal-foot">
+      <button class="btn-secondary" onclick="removeHeaderImage()">Remove image</button>
+      <button class="btn-secondary" onclick="closeModal('m-header-image')">Cancel</button>
+      <button class="btn-primary" onclick="saveHeaderImageFromUrl()">Save →</button>
+    </div>
+  </div>
+</div>
+
+<!-- Scrapbook Add Photo Modal -->
+<div class="modal-bg" id="m-scrap-photo">
+  <div class="modal">
+    <div class="modal-head"><div class="modal-title">🖼 Add Photo</div><button class="modal-close" onclick="closeModal('m-scrap-photo')">✕</button></div>
+    <div class="modal-body">
+      <div class="field">
+        <label>Image URL</label>
+        <input class="fi" id="sp-url" placeholder="https://example.com/photo.jpg"/>
+      </div>
+      <div style="text-align:center;color:var(--tl);font-size:13px;margin:10px 0">— or —</div>
+      <div class="field">
+        <label>Upload from computer</label>
+        <button class="btn-secondary" style="width:100%" onclick="document.getElementById('sp-file').click()">Choose file</button>
+        <input type="file" id="sp-file" accept="image/*" style="display:none" onchange="handleScrapFileUpload(this)">
+      </div>
+      <div class="field" style="margin-top:12px">
+        <label>Caption (optional)</label>
+        <input class="fi" id="sp-caption" placeholder="Add a note..."/>
+      </div>
+    </div>
+    <div class="modal-foot">
+      <button class="btn-secondary" onclick="closeModal('m-scrap-photo')">Cancel</button>
+      <button class="btn-primary" onclick="addScrapPhoto()">Add →</button>
     </div>
   </div>
 </div>
