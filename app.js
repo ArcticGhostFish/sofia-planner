@@ -53,8 +53,9 @@ let journalMoods = S.get('journalMoods') || {};
 let schedEditMode = false;
 let radioEditMode = false;
 
-// Calendar
-let calY = 2026, calM = 2;
+// Calendar – always initialise to the current month/year
+const _calInit = new Date();
+let calY = _calInit.getFullYear(), calM = _calInit.getMonth();
 const MONTHS_SV = ['Januari','Februari','Mars','April','Maj','Juni','Juli','Augusti','September','Oktober','November','December'];
 const DAYS_SV = ['M\u00e5n','Tis','Ons','Tor','Fre','L\u00f6r','S\u00f6n'];
 
@@ -79,7 +80,7 @@ let radioStations = S.get('radioStations') || [
 ];
 
 // Widget order
-let widgetOrder = S.get('widgetOrder') || ['nav', 'today', 'habits-today', 'budget-mini', 'calendar-widget', 'scrapbook'];
+let widgetOrder = S.get('widgetOrder') || ['nav', 'today', 'habits-today', 'upcoming', 'budget-mini', 'calendar-widget', 'scrapbook'];
 let widgetSizes = S.get('widgetSizes') || { 'calendar-widget': 'md' };
 
 // Moodboard
@@ -136,6 +137,9 @@ let habitView = 'weekly'; // 'weekly' | 'heatmap'
 // Class filter
 let showArchivedClasses = false;
 
+// Class editing
+let editingClassId = null;
+
 // ===== UTILITIES =====
 function escHtml(s) {
   return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
@@ -151,6 +155,7 @@ function nav(page) {
   if (navEl) navEl.classList.add('active');
   const fns = {
     home: renderHome,
+    today: renderToday,
     journal: renderJournal,
     habits: renderHabits,
     budget: renderBudget,
@@ -162,6 +167,62 @@ function nav(page) {
   };
   if (fns[page]) fns[page]();
 }
+
+// ===== TODAY VIEW =====
+function renderToday() {
+  const now = new Date();
+  const todayStr = now.toLocaleDateString('sv-SE');
+  const titleEl = document.getElementById('today-view-title');
+  if (titleEl) titleEl.textContent = now.toLocaleDateString('sv-SE', { weekday: 'long', day: 'numeric', month: 'long' });
+  const body = document.getElementById('today-body');
+  if (!body) return;
+
+  // Today's events
+  const todayEvs = calManualEvents.filter(e => e.date === todayStr);
+  const gcalToday = gcalEvents.filter(e => { const d = new Date(e.start?.dateTime || e.start?.date); return d.toLocaleDateString('sv-SE') === todayStr; });
+  const evHtml = [...todayEvs.map(e => `<div class="today-event-row"><span class="today-time-tag">${e.time || 'All day'}</span><span>${escHtml(e.title)}</span></div>`),
+    ...gcalToday.map(e => { const h = e.start?.dateTime ? new Date(e.start.dateTime).toLocaleTimeString('sv-SE',{hour:'2-digit',minute:'2-digit'}) : 'All day'; return `<div class="today-event-row"><span class="today-time-tag">${h}</span><span>${escHtml(e.summary||'Event')}</span><span style="font-size:10px;color:var(--teal);margin-left:auto">GCal</span></div>`; })
+  ].join('') || '<div style="font-size:13px;color:var(--tl);font-style:italic">No events today</div>';
+
+  // Habits
+  const habitHtml = habits.slice(0, 8).map(h => {
+    const k = hKey(h.id, todayStr);
+    return `<div style="display:flex;align-items:center;gap:10px;padding:6px 0;border-bottom:1px solid var(--border)">
+      <input type="checkbox" class="hcb" ${hChecks[k] ? 'checked' : ''} onchange="togHToday('${k}',this.checked)" style="accent-color:var(--teal);width:16px;height:16px;cursor:pointer">
+      <span style="font-size:13px;color:var(--tm)">${h.emoji} ${escHtml(h.name)}</span>
+    </div>`;
+  }).join('') || '<div style="font-size:13px;color:var(--tl);font-style:italic">No habits set up</div>';
+
+  // Tasks due today or overdue
+  const overdue = tasks.filter(t => !t.done && t.due && t.due <= todayStr);
+  const taskHtml = overdue.length
+    ? overdue.map(t => `<div class="today-event-row"><span style="font-size:10px;font-weight:700;color:${t.due < todayStr ? 'var(--rose)' : 'var(--teal)'};min-width:54px">${t.due < todayStr ? 'OVERDUE' : 'TODAY'}</span><span>${escHtml(t.title)}</span></div>`).join('')
+    : '<div style="font-size:13px;color:var(--tl);font-style:italic">No tasks due today</div>';
+
+  // Next exam
+  const nextExam = classExams.filter(e => !e.done && e.date >= todayStr).sort((a,b) => a.date.localeCompare(b.date))[0];
+  const examHtml = nextExam
+    ? (() => { const cls = classes.find(c => c.id === nextExam.classId); const days = Math.round((new Date(nextExam.date) - now) / 86400000); return `<div class="today-event-row"><span class="today-time-tag" style="color:${days <= 3 ? 'var(--rose)' : 'var(--teal)'}">in ${days}d</span><span>${escHtml(nextExam.title)}</span><span class="upcoming-cls" style="margin-left:auto">${cls ? escHtml(cls.name) : ''}</span></div>`; })()
+    : '<div style="font-size:13px;color:var(--tl);font-style:italic">No upcoming exams</div>';
+
+  body.innerHTML = `
+    <div class="today-section"><div class="today-section-title">Events</div>${evHtml}</div>
+    <div class="today-section"><div class="today-section-title">Habits</div>${habitHtml}</div>
+    <div class="today-section"><div class="today-section-title">Tasks due today</div>${taskHtml}</div>
+    <div class="today-section"><div class="today-section-title">Next exam</div>${examHtml}</div>
+  `;
+}
+
+// ===== FAB =====
+let fabOpen = false;
+function toggleFab() {
+  fabOpen = !fabOpen;
+  const menu = document.getElementById('fab-menu');
+  const btn = document.getElementById('fab-btn');
+  if (menu) menu.classList.toggle('open', fabOpen);
+  if (btn) btn.style.transform = fabOpen ? 'rotate(45deg)' : '';
+}
+function closeFab() { fabOpen = false; const menu = document.getElementById('fab-menu'); if (menu) menu.classList.remove('open'); const btn = document.getElementById('fab-btn'); if (btn) btn.style.transform = ''; }
 
 // ===== HOME =====
 function renderHome() {
@@ -184,6 +245,7 @@ function renderWidgets() {
       { id: 'nav', label: '🐚 Navigate' },
       { id: 'today', label: '☀️ Today' },
       { id: 'habits-today', label: '✓ Habits Today' },
+      { id: 'upcoming', label: '🗓 Upcoming Deadlines' },
       { id: 'budget-mini', label: '💰 Budget' },
       { id: 'calendar-widget', label: '📅 Calendar' },
       { id: 'scrapbook', label: '🖼️ Scrapbook' },
@@ -263,7 +325,7 @@ function buildWidget(id) {
       let inc = 0, exp = 0, sav = 0;
       budget.forEach(b => { if (b.dir === 'income') inc += b.amount; else if (b.dir === 'expense') exp += b.amount; else sav += b.amount; });
       const bal = inc - exp - sav;
-      w.innerHTML = `${handle}${sizeBtns}<div class="card-head">\ud83d\udcb0 Budget \u00b7 Mars 2026</div><div class="widget-body">
+      w.innerHTML = `${handle}${sizeBtns}<div class="card-head">\ud83d\udcb0 Budget \u00b7 ${MONTHS_SV[new Date().getMonth()]} ${new Date().getFullYear()}</div><div class="widget-body">
         <div style="display:flex;justify-content:space-between;margin-bottom:6px;font-size:13px"><span style="color:var(--tl)">Inkomst</span><span class="income-color">+${fmtKr(inc)}</span></div>
         <div style="display:flex;justify-content:space-between;margin-bottom:6px;font-size:13px"><span style="color:var(--tl)">Utgifter</span><span class="expense-color">-${fmtKr(exp + sav)}</span></div>
         <div style="display:flex;justify-content:space-between;padding-top:6px;border-top:1px solid var(--border);font-size:14px"><span><strong>Balans</strong></span><span class="balance-color" style="font-weight:700">${fmtKr(bal)}</span></div>
@@ -291,6 +353,34 @@ function buildWidget(id) {
       </div>
       <div style="padding:10px;display:grid;grid-template-columns:repeat(3,1fr);gap:6px;cursor:pointer" onclick="nav('scrapbook')">
         ${preview.length ? grid2 : '<div style=\'grid-column:1/4;text-align:center;padding:20px 0;font-size:13px;color:var(--tl)\'>No photos yet</div>'}
+      </div>`;
+      break;
+    }
+
+    case 'upcoming': {
+      const todayStr2 = new Date().toLocaleDateString('sv-SE');
+      const cutoff = new Date(Date.now() + 30 * 86400000).toLocaleDateString('sv-SE');
+      const upItems = [];
+      classExams.forEach(e => {
+        if (!e.done && e.date >= todayStr2 && e.date <= cutoff) {
+          const cls = classes.find(c => c.id === e.classId);
+          const days = Math.round((new Date(e.date) - new Date()) / 86400000);
+          upItems.push({ date: e.date, title: e.title, cls: cls ? cls.name : '', color: cls?.color || 'var(--teal)', days });
+        }
+      });
+      upItems.sort((a, b) => a.date.localeCompare(b.date));
+      const rows = upItems.slice(0, 5).map(i => `
+        <div class="upcoming-row">
+          <span class="upcoming-dot" style="background:${i.color}"></span>
+          <div style="min-width:0;flex:1">
+            <div style="font-size:13px;color:var(--td);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${escHtml(i.title)}</div>
+            <div class="upcoming-cls">${escHtml(i.cls)} · ${i.date.slice(5)}</div>
+          </div>
+          <span class="upcoming-days${i.days <= 3 ? ' urgent' : ''}">in ${i.days}d</span>
+        </div>`).join('');
+      w.innerHTML = `${handle}${sizeBtns}<div class="card-head">\ud83d\uddd3\ufe0f Upcoming Deadlines</div><div class="widget-body">
+        ${rows || '<div style="font-size:13px;color:var(--tl);font-style:italic">No deadlines in the next 30 days</div>'}
+        <button class="btn-link" style="margin-top:10px;width:100%;text-align:center" onclick="nav('study')">View all \u2192</button>
       </div>`;
       break;
     }
@@ -614,7 +704,7 @@ function renderJournal() {
   document.getElementById('journal-date-label').textContent = new Date().toLocaleDateString('sv-SE', { weekday: 'long', day: 'numeric', month: 'long' });
   loadJournalDay(today);
   renderDiaryList();
-  renderSbRecentNotes();
+  renderSbUpcoming();
   setTimeout(renderMoodChart, 50);
 }
 
@@ -691,16 +781,20 @@ function renderDiaryList() {
   if (!el) return;
   const moodClass = m => ({ '\ud83d\ude0a': 'mood-happy', '\ud83d\ude0c': 'mood-calm', '\ud83d\ude34': 'mood-tired', '\ud83d\ude24': 'mood-stressed', '\ud83d\ude29': 'mood-stressed', '\ud83e\udd70': 'mood-happy', '\ud83d\ude2d': 'mood-calm' }[m] || 'mood-calm');
   el.innerHTML = diary.map((e, i) => `
-    <div class="diary-card" onclick="openDiaryEntry(${i})">
-      <div class="diary-card-head">
+    <div class="diary-card">
+      <div class="diary-card-head" onclick="openDiaryEntry(${i})" style="cursor:pointer">
         <div>
           <div class="diary-title">${escHtml(e.title)}</div>
           <div class="diary-date">${e.date}${e.type ? ' \u00b7 ' + e.type : ''}</div>
         </div>
         <span class="mood-tag ${moodClass(e.mood)}">${e.mood || ''} ${e.type || 'entry'}</span>
       </div>
-      <div class="diary-preview">${escHtml((e.content || '').slice(0, 110))}${(e.content || '').length > 110 ? '\u2026' : ''}</div>
+      <div class="diary-preview" onclick="openDiaryEntry(${i})" style="cursor:pointer">${escHtml((e.content || '').slice(0, 110))}${(e.content || '').length > 110 ? '\u2026' : ''}</div>
       ${e.photos && e.photos.length ? `<div style="display:flex;gap:4px;padding:6px 14px;flex-wrap:wrap">${e.photos.map(p => `<img src="${p}" style="height:48px;width:48px;object-fit:cover;border-radius:4px;border:1px solid var(--border)">`).join('')}</div>` : ''}
+      <div class="diary-card-actions">
+        <button class="diary-action-btn" onclick="editDiaryEntry(${e.id})">✏️ Edit</button>
+        <button class="diary-action-btn del" onclick="deleteDiaryEntry(${e.id})">🗑 Delete</button>
+      </div>
     </div>
   `).join('') || '<div style="color:var(--tl);font-style:italic;font-size:13px">No entries yet.</div>';
 }
@@ -740,6 +834,20 @@ function createDiaryEntry() {
   curDiary = { id: Date.now(), title, mood: '', type, date: new Date().toLocaleDateString('sv-SE'), content: '', grateful: '' };
   closeModal('m-diary');
   loadDiaryEntry(curDiary);
+}
+
+function editDiaryEntry(id) {
+  const entry = diary.find(e => e.id === id);
+  if (!entry) return;
+  curDiary = entry;
+  loadDiaryEntry(entry);
+}
+
+function deleteDiaryEntry(id) {
+  if (!confirm('Delete this journal entry?')) return;
+  diary = diary.filter(e => e.id !== id);
+  S.set('diary', diary);
+  renderDiaryList();
 }
 
 // ===== HABITS =====
@@ -1046,6 +1154,7 @@ function renderClassContent() {
           </div>
         </div>
         <div style="display:flex;gap:6px">
+          <button onclick="editClass(${cls.id})" style="background:none;border:1px solid var(--border);border-radius:6px;color:var(--tl);cursor:pointer;font-size:12px;padding:4px 10px">✏️ Edit</button>
           <button onclick="archiveClass(${cls.id})" style="background:none;border:1px solid var(--border);border-radius:6px;color:var(--tl);cursor:pointer;font-size:12px;padding:4px 10px">${cls.archived ? '↩ Unarchive' : '📦 Archive'}</button>
           <button onclick="deleteClass(${cls.id})" style="background:none;border:none;color:var(--tl);cursor:pointer;font-size:12px">✕ Remove</button>
         </div>
@@ -1200,16 +1309,48 @@ function addClass() {
   const room = document.getElementById('ac-room')?.value.trim() || '';
   const semester = document.getElementById('ac-semester')?.value.trim() || '';
   if (!name) return;
-  const newClass = { id: Date.now(), name, emoji, color, professor, profEmail, officeHours, room, semester, currentGrade: '', goals: '', archived: false };
-  classes.push(newClass);
+
+  if (editingClassId) {
+    const idx = classes.findIndex(c => c.id === editingClassId);
+    if (idx >= 0) {
+      classes[idx] = { ...classes[idx], name, emoji, color, professor, profEmail, officeHours, room, semester };
+    }
+    editingClassId = null;
+  } else {
+    const newClass = { id: Date.now(), name, emoji, color, professor, profEmail, officeHours, room, semester, currentGrade: '', goals: '', archived: false };
+    classes.push(newClass);
+    activeClassId = newClass.id;
+  }
+
   S.set('classes', classes);
-  activeClassId = newClass.id;
   closeModal('m-add-class');
+  // Reset modal title back to Add
+  const modalTitle = document.querySelector('#m-add-class .modal-title');
+  if (modalTitle) modalTitle.textContent = 'Add Class';
   ['ac-name','ac-emoji','ac-professor','ac-prof-email','ac-office-hours','ac-room','ac-semester'].forEach(id => {
     const el = document.getElementById(id);
     if (el) el.value = '';
   });
   renderStudy();
+}
+
+function editClass(id) {
+  const cls = classes.find(c => c.id === id);
+  if (!cls) return;
+  editingClassId = id;
+  // Pre-fill modal fields
+  document.getElementById('ac-name').value = cls.name;
+  document.getElementById('ac-emoji').value = cls.emoji || '';
+  if (document.getElementById('ac-color')) document.getElementById('ac-color').value = cls.color || '#0d9488';
+  if (document.getElementById('ac-professor')) document.getElementById('ac-professor').value = cls.professor || '';
+  if (document.getElementById('ac-prof-email')) document.getElementById('ac-prof-email').value = cls.profEmail || '';
+  if (document.getElementById('ac-office-hours')) document.getElementById('ac-office-hours').value = cls.officeHours || '';
+  if (document.getElementById('ac-room')) document.getElementById('ac-room').value = cls.room || '';
+  if (document.getElementById('ac-semester')) document.getElementById('ac-semester').value = cls.semester || '';
+  // Update modal title to indicate edit mode
+  const modalTitle = document.querySelector('#m-add-class .modal-title');
+  if (modalTitle) modalTitle.textContent = 'Edit Class';
+  openModal('m-add-class');
 }
 
 function deleteClass(id) {
@@ -1459,15 +1600,19 @@ function renderNotes() {
     el.innerHTML = `<div style="grid-column:1/-1;color:var(--tl);font-style:italic;font-size:13px;padding:12px 0">No notes match "${escHtml(notesSearchQuery)}".</div>`;
     return;
   }
-  el.innerHTML = results.map(n => `
-    <div class="note-card" onclick="openNote(${n.id})">
+  el.innerHTML = results.map(n => {
+    const cls = classes.find(c => c.name === n.class);
+    const badgeColor = cls?.color || '#6b7280';
+    const badgeLabel = n.class || 'General';
+    return `<div class="note-card" onclick="openNote(${n.id})">
       <div class="note-card-thumb">📝</div>
       <div class="note-card-body">
         <div class="note-card-title">${escHtml(n.title)}</div>
-        <div class="note-card-meta">${escHtml(n.class || 'General')} · ${n.date || ''}</div>
+        <div class="note-card-meta">${n.date || ''}</div>
+        <span class="note-class-badge" style="background:${badgeColor}">${escHtml(badgeLabel)}</span>
       </div>
-    </div>
-  `).join('');
+    </div>`;
+  }).join('');
 }
 
 function notesSearch(q) {
@@ -1484,14 +1629,35 @@ function renderStudyNotesList() {
   </div>`;
 }
 
-function renderSbRecentNotes() {
-  const el = document.getElementById('sb-recent-notes');
+function renderSbUpcoming() {
+  const el = document.getElementById('sb-upcoming');
   if (!el) return;
-  el.innerHTML = notes.slice(0, 4).map(n => `
-    <div class="sb-item" onclick="openNote(${n.id})">
-      <span class="sb-icon">\ud83d\udcdd</span> ${escHtml(n.title.slice(0, 20))}${n.title.length > 20 ? '\u2026' : ''}
-    </div>
-  `).join('') || '<div style="font-size:11px;color:var(--tl);padding:4px 14px">No notes yet</div>';
+  const today = new Date();
+  const todayStr = today.toLocaleDateString('sv-SE');
+  const limit = new Date(today.getTime() + 7 * 86400000).toLocaleDateString('sv-SE');
+
+  const items = [];
+  // Exams from all classes
+  classExams.forEach(e => {
+    if (!e.done && e.date >= todayStr && e.date <= limit) {
+      const cls = classes.find(c => c.id === e.classId);
+      items.push({ date: e.date, title: e.title, sub: cls ? cls.name : 'Exam' });
+    }
+  });
+  // Manual calendar events
+  calManualEvents.forEach(e => {
+    if (e.date >= todayStr && e.date <= limit) {
+      items.push({ date: e.date, title: e.title, sub: 'Event' });
+    }
+  });
+  items.sort((a, b) => a.date.localeCompare(b.date));
+  const top = items.slice(0, 3);
+  el.innerHTML = top.length
+    ? top.map(i => `<div class="sb-upcoming-item">
+        <div class="sb-upcoming-title">${escHtml(i.title)}</div>
+        <div class="sb-upcoming-date">${i.date.slice(5)} · ${escHtml(i.sub)}</div>
+      </div>`).join('')
+    : '<div style="font-size:11px;color:var(--tl);padding:4px 16px">Nothing upcoming</div>';
 }
 
 function openNewNote() {
@@ -1603,6 +1769,13 @@ function renderCal() {
 }
 
 function setCalView(v) { calView = v; renderCal(); }
+
+function calGoToday() {
+  const t = new Date();
+  calY = t.getFullYear(); calM = t.getMonth();
+  calWeekOff = 0; calDayNum = null;
+  renderCal();
+}
 
 function renderCalMonth() {
   const el = document.getElementById('cal-grid-main');
@@ -2123,6 +2296,13 @@ function addCalEvent() {
   closeModal('m-cal-event');
   renderCal();
   renderWidgets();
+
+  // Push to Google Calendar if connected (only the base event, not recurring copies)
+  if (gcalToken) {
+    createGCalEvent(title, date, time).then(ok => {
+      if (ok) fetchGCalEvents();
+    });
+  }
 }
 
 function removeCalEvent(id) {
@@ -2277,18 +2457,92 @@ function applyAllHeaderImages() {
 function renderScrapbook() {
   const el = document.getElementById('scrapbook-grid');
   if (!el) return;
+
+  // Migrate old items that lack position data
+  let changed = false;
+  scrapbookPhotos.forEach((p, i) => {
+    if (p.x === undefined) {
+      p.x = (i % 4) * 26;
+      p.y = Math.floor(i / 4) * 220 + 10;
+      p.w = 22;
+      changed = true;
+    }
+  });
+  if (changed) S.set('scrapbookPhotos', scrapbookPhotos);
+
+  const maxBottom = scrapbookPhotos.reduce((m, p) => Math.max(m, p.y + 200), 260);
+  el.style.minHeight = Math.max(400, maxBottom + 40) + 'px';
+  el.style.position = 'relative';
+
   if (!scrapbookPhotos.length) {
     el.innerHTML = '<div style="text-align:center;padding:60px 20px;color:var(--tl)"><div style="font-size:48px;margin-bottom:12px">🖼</div><div style="font-size:16px">No photos yet. Click "+ Add Photo" to start your scrapbook.</div></div>';
     return;
   }
+
   el.innerHTML = scrapbookPhotos.map(p => `
-    <div class="scrapbook-card">
-      <img class="scrapbook-img" src="${escHtml(p.url)}" alt="${escHtml(p.caption || '')}" onerror="this.style.display='none'">
-      <div class="scrapbook-caption">
-        <span>${escHtml(p.caption || '')}</span>
-        <button onclick="removeScrapPhoto(${p.id})" style="background:none;border:none;color:var(--tl);cursor:pointer;font-size:13px;flex-shrink:0">✕</button>
-      </div>
+    <div class="sc-img" data-id="${p.id}" style="left:${p.x}%;top:${p.y}px;width:${p.w}%">
+      <img src="${escHtml(p.url)}" alt="${escHtml(p.caption || '')}" onerror="this.style.opacity='.3'">
+      ${p.caption ? `<div class="sc-caption">${escHtml(p.caption)}</div>` : ''}
+      <button class="sc-delete" onclick="removeScrapPhoto(${p.id})">✕</button>
+      <div class="sc-resize" data-id="${p.id}"></div>
     </div>`).join('');
+
+  initScrapbookDrag();
+}
+
+function initScrapbookDrag() {
+  const canvas = document.getElementById('scrapbook-grid');
+  if (!canvas) return;
+  canvas.querySelectorAll('.sc-img').forEach(imgEl => {
+    const id = Number(imgEl.dataset.id);
+
+    imgEl.addEventListener('mousedown', e => {
+      if (e.target.classList.contains('sc-delete') || e.target.classList.contains('sc-resize')) return;
+      e.preventDefault();
+      const rect = canvas.getBoundingClientRect();
+      const p = scrapbookPhotos.find(i => i.id === id);
+      if (!p) return;
+      const startX = e.clientX, startY = e.clientY, origX = p.x, origY = p.y;
+      const onMove = mv => {
+        const dx = ((mv.clientX - startX) / rect.width) * 100;
+        p.x = Math.max(0, Math.min(100 - p.w, origX + dx));
+        p.y = Math.max(0, origY + (mv.clientY - startY));
+        imgEl.style.left = p.x + '%';
+        imgEl.style.top = p.y + 'px';
+      };
+      const onUp = () => {
+        document.removeEventListener('mousemove', onMove);
+        document.removeEventListener('mouseup', onUp);
+        S.set('scrapbookPhotos', scrapbookPhotos);
+        renderScrapbook();
+      };
+      document.addEventListener('mousemove', onMove);
+      document.addEventListener('mouseup', onUp);
+    });
+
+    const resizeHandle = imgEl.querySelector('.sc-resize');
+    if (resizeHandle) {
+      resizeHandle.addEventListener('mousedown', e => {
+        e.preventDefault(); e.stopPropagation();
+        const rect = canvas.getBoundingClientRect();
+        const p = scrapbookPhotos.find(i => i.id === id);
+        if (!p) return;
+        const startX = e.clientX, origW = p.w;
+        const onMove = mv => {
+          p.w = Math.max(10, Math.min(100, origW + ((mv.clientX - startX) / rect.width) * 100));
+          imgEl.style.width = p.w + '%';
+        };
+        const onUp = () => {
+          document.removeEventListener('mousemove', onMove);
+          document.removeEventListener('mouseup', onUp);
+          S.set('scrapbookPhotos', scrapbookPhotos);
+          renderScrapbook();
+        };
+        document.addEventListener('mousemove', onMove);
+        document.addEventListener('mouseup', onUp);
+      });
+    }
+  });
 }
 
 function openAddScrapPhoto() {
@@ -2309,7 +2563,8 @@ function addScrapPhoto() {
   const url = document.getElementById('sp-url').value.trim();
   const caption = document.getElementById('sp-caption').value.trim();
   if (!url) return;
-  scrapbookPhotos.unshift({ id: Date.now(), url, caption, date: new Date().toLocaleDateString('sv-SE') });
+  const n = scrapbookPhotos.length;
+  scrapbookPhotos.unshift({ id: Date.now(), url, caption, date: new Date().toLocaleDateString('sv-SE'), x: (n % 4) * 26, y: 10, w: 22 });
   S.set('scrapbookPhotos', scrapbookPhotos);
   closeModal('m-scrap-photo');
   renderScrapbook();
@@ -2630,7 +2885,7 @@ function scheduleExamNotifications() {
 window.addEventListener('load', () => {
   updateSbDate();
   renderProfilePhoto();
-  renderSbRecentNotes();
+  renderSbUpcoming();
 
   document.querySelectorAll('.sb-item[data-view]').forEach(item => {
     item.addEventListener('click', () => nav(item.dataset.view));
@@ -2658,7 +2913,12 @@ window.addEventListener('load', () => {
       e.preventDefault();
       openSearch();
     }
-    if (e.key === 'Escape') closeSearch();
+    if (e.key === 'Escape') { closeSearch(); closeFab(); }
+  });
+
+  // Close FAB when clicking outside
+  document.addEventListener('click', e => {
+    if (fabOpen && !document.getElementById('fab-wrap')?.contains(e.target)) closeFab();
   });
 
   // Close sidebar on mobile when nav item clicked

@@ -49,18 +49,22 @@
   <div class="sb-nav">
     <div class="sb-section">
       <div class="sb-item active" data-view="home"><span class="sb-icon">🏠</span> Hem</div>
+      <div class="sb-item" data-view="today"><span class="sb-icon">☀️</span> Today</div>
+      <div class="sb-group-label">Life</div>
       <div class="sb-item" data-view="journal"><span class="sb-icon">📔</span> Journal</div>
       <div class="sb-item" data-view="habits"><span class="sb-icon">✓</span> Habits</div>
       <div class="sb-item" data-view="budget"><span class="sb-icon">💰</span> Budget</div>
+      <div class="sb-item" data-view="scrapbook"><span class="sb-icon">🖼</span> Scrapbook</div>
+      <div class="sb-group-label">Academic</div>
       <div class="sb-item" data-view="study"><span class="sb-icon">📚</span> Study Hub</div>
       <div class="sb-item" data-view="notes"><span class="sb-icon">📝</span> Notes</div>
       <div class="sb-item" data-view="tasks"><span class="sb-icon">✅</span> Tasks</div>
+      <div class="sb-group-label">Planning</div>
       <div class="sb-item" data-view="planner"><span class="sb-icon">📅</span> Life Planner</div>
-      <div class="sb-item" data-view="scrapbook"><span class="sb-icon">🖼</span> Scrapbook</div>
     </div>
     <div class="sb-section">
-      <div class="sb-label">Senaste anteckningar</div>
-      <div id="sb-recent-notes"></div>
+      <div class="sb-upcoming-label">Upcoming</div>
+      <div id="sb-upcoming"></div>
     </div>
   </div>
 
@@ -429,7 +433,8 @@
           <div class="card-body">
             <div class="cal-nav">
               <button class="cal-nb" onclick="calPrev()">‹</button>
-              <div class="cal-title" id="cal-title-main">Mars 2026</div>
+              <div class="cal-title" id="cal-title-main"></div>
+              <button class="cal-today-btn" onclick="calGoToday()" title="Jump to today">Today</button>
               <button class="cal-nb" onclick="calNext()">›</button>
             </div>
             <div id="cal-grid-main"></div>
@@ -513,12 +518,34 @@
       <h2 class="view-title">Scrapbook</h2>
       <button class="btn-primary" onclick="openAddScrapPhoto()">+ Add Photo</button>
     </div>
-    <div id="scrapbook-grid" class="scrapbook-grid"></div>
+    <div id="scrapbook-grid" class="sc-canvas"></div>
+  </div>
+</div>
+
+<!-- ────────────────── TODAY ────────────────── -->
+<div class="view" id="view-today">
+  <div class="view-hero h-water" id="hero-today">
+    <div class="page-icon">☀️</div>
+  </div>
+  <div class="view-content">
+    <h2 class="view-title" id="today-view-title"></h2>
+    <div id="today-body"></div>
   </div>
 </div>
 
 </main><!-- end #main -->
 </div><!-- end #app -->
+
+<!-- ===== QUICK-ADD FAB ===== -->
+<div id="fab-wrap">
+  <div id="fab-menu">
+    <button class="fab-option" onclick="closeFab();openNewDiaryModal()">📔 Journal Entry</button>
+    <button class="fab-option" onclick="closeFab();openNewNote()">📝 Note</button>
+    <button class="fab-option" onclick="closeFab();openModal('m-add-task')">✅ Task</button>
+    <button class="fab-option" onclick="closeFab();openAddCalEvent(new Date().getDate(),new Date().getMonth(),new Date().getFullYear())">📅 Calendar Event</button>
+  </div>
+  <button id="fab-btn" onclick="toggleFab()" title="Quick add">+</button>
+</div>
 
 <!-- ===== RADIO PLAYER ===== -->
 <button id="radio-fab" title="Radio">🎵</button>
