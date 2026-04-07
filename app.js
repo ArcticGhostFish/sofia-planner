@@ -140,6 +140,17 @@ let showArchivedClasses = false;
 // Class editing
 let editingClassId = null;
 
+// Profile
+let profileName = S.get('profileName') || 'Sofia Merdovic';
+let profileSub  = S.get('profileSub')  || 'Life Planner';
+
+// Edit-in-place flags
+let editingBudgetId  = null;
+let editingHabitId   = null;
+let editingExamId    = null;
+let editingTaskId    = null;
+let editingCalEventId = null;
+
 // ===== UTILITIES =====
 function escHtml(s) {
   return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
@@ -523,25 +534,22 @@ function removeWidget(id) {
   renderWidgets();
 }
 
-// ===== MOODBOARD =====
+// ===== MOODBOARD (unified with Scrapbook — both use scrapbookPhotos) =====
 let moodboardPendingTarget = null;
 
 function renderMoodboard() {
   const el = document.getElementById('dash-moodboard');
   if (!el) return;
-  // Update canvas height based on content
-  const maxBottom = moodboardImages.reduce((max, img) => {
-    return Math.max(max, img.y + (img.h || img.w * 0.75));
-  }, 30);
+  const maxBottom = scrapbookPhotos.reduce((m, p) => Math.max(m, (p.y || 0) + 200), 220);
   el.style.minHeight = Math.max(220, maxBottom + 20) + 'px';
+  el.style.position = 'relative';
 
-  el.innerHTML = moodboardImages.map(img => `
-    <div class="mb-img" id="mb-${img.id}" data-id="${img.id}"
-         style="left:${img.x}%;top:${img.y}px;width:${img.w}%">
-      <img src="${escHtml(img.url)}" onerror="this.style.opacity='0.3'">
-      <button class="mb-delete" onclick="removeMoodImage(${img.id})">✕</button>
-      <div class="mb-resize-handle" data-id="${img.id}"></div>
-    </div>`).join('') || `<div class="mb-empty">Your mood board · Click "+ Add Image" to place images anywhere</div>`;
+  el.innerHTML = scrapbookPhotos.map(p => `
+    <div class="mb-img" data-id="${p.id}" style="left:${p.x||5}%;top:${p.y||10}px;width:${p.w||22}%">
+      <img src="${escHtml(p.url)}" onerror="this.style.opacity='0.3'">
+      <button class="mb-delete" onclick="removeScrapPhoto(${p.id});renderMoodboard()">✕</button>
+      <div class="mb-resize-handle" data-id="${p.id}"></div>
+    </div>`).join('') || `<div class="mb-empty">Your mood board &amp; scrapbook · Click "+ Add Image" below</div>`;
   initMoodboardDrag();
 }
 
@@ -550,50 +558,44 @@ function initMoodboardDrag() {
   if (!canvas) return;
   canvas.querySelectorAll('.mb-img').forEach(imgEl => {
     const id = Number(imgEl.dataset.id);
-    // Drag to move
     imgEl.addEventListener('mousedown', e => {
       if (e.target.classList.contains('mb-delete') || e.target.classList.contains('mb-resize-handle')) return;
       e.preventDefault();
       const rect = canvas.getBoundingClientRect();
-      const startX = e.clientX, startY = e.clientY;
-      const img = moodboardImages.find(i => i.id === id);
-      if (!img) return;
-      const origX = img.x, origY = img.y;
+      const p = scrapbookPhotos.find(i => i.id === id);
+      if (!p) return;
+      const startX = e.clientX, startY = e.clientY, origX = p.x || 5, origY = p.y || 10;
       const onMove = mv => {
-        const dx = ((mv.clientX - startX) / rect.width) * 100;
-        const dy = mv.clientY - startY;
-        img.x = Math.max(0, Math.min(95 - img.w, origX + dx));
-        img.y = Math.max(0, origY + dy);
-        imgEl.style.left = img.x + '%';
-        imgEl.style.top = img.y + 'px';
+        p.x = Math.max(0, Math.min(95 - (p.w || 22), origX + ((mv.clientX - startX) / rect.width) * 100));
+        p.y = Math.max(0, origY + (mv.clientY - startY));
+        imgEl.style.left = p.x + '%';
+        imgEl.style.top = p.y + 'px';
       };
       const onUp = () => {
         document.removeEventListener('mousemove', onMove);
         document.removeEventListener('mouseup', onUp);
-        S.set('moodboardImages', moodboardImages);
+        S.set('scrapbookPhotos', scrapbookPhotos);
         renderMoodboard();
       };
       document.addEventListener('mousemove', onMove);
       document.addEventListener('mouseup', onUp);
     });
-    // Resize handle
     const resizeHandle = imgEl.querySelector('.mb-resize-handle');
     if (resizeHandle) {
       resizeHandle.addEventListener('mousedown', e => {
         e.preventDefault(); e.stopPropagation();
         const rect = canvas.getBoundingClientRect();
-        const img = moodboardImages.find(i => i.id === id);
-        if (!img) return;
-        const startX = e.clientX, origW = img.w;
+        const p = scrapbookPhotos.find(i => i.id === id);
+        if (!p) return;
+        const startX = e.clientX, origW = p.w || 22;
         const onMove = mv => {
-          const dx = ((mv.clientX - startX) / rect.width) * 100;
-          img.w = Math.max(10, Math.min(100, origW + dx));
-          imgEl.style.width = img.w + '%';
+          p.w = Math.max(10, Math.min(100, origW + ((mv.clientX - startX) / rect.width) * 100));
+          imgEl.style.width = p.w + '%';
         };
         const onUp = () => {
           document.removeEventListener('mousemove', onMove);
           document.removeEventListener('mouseup', onUp);
-          S.set('moodboardImages', moodboardImages);
+          S.set('scrapbookPhotos', scrapbookPhotos);
           renderMoodboard();
         };
         document.addEventListener('mousemove', onMove);
@@ -604,15 +606,11 @@ function initMoodboardDrag() {
 }
 
 function openAddMoodImage() {
-  moodboardPendingTarget = 'moodboard';
-  document.getElementById('photo-url-input').value = '';
-  openModal('m-photo-input');
+  openAddScrapPhoto(); // same collection now
 }
 
 function removeMoodImage(id) {
-  moodboardImages = moodboardImages.filter(i => i.id !== id);
-  S.set('moodboardImages', moodboardImages);
-  renderMoodboard();
+  removeScrapPhoto(id);
 }
 
 // ===== HERO SIZE =====
@@ -921,7 +919,10 @@ function renderHabits() {
         ${streak > 0 ? '🔥' : '—'} ${streak > 0 ? streak : ''}
       </span>
     </td>
-    <td><button onclick="deleteHabit(${h.id})" style="background:none;border:none;color:var(--tl);cursor:pointer;font-size:11px">✕</button></td>`;
+    <td style="display:flex;gap:2px;align-items:center">
+      <button onclick="editHabit(${h.id})" style="background:none;border:none;color:var(--tl);cursor:pointer;font-size:11px" title="Edit">✏️</button>
+      <button onclick="deleteHabit(${h.id})" style="background:none;border:none;color:var(--tl);cursor:pointer;font-size:11px">✕</button>
+    </td>`;
     html += '</tr>';
   });
   html += '</tbody>';
@@ -992,11 +993,30 @@ function updateHPct(days) {
 
 function hWeek(d) { hWkOff += d; renderHabits(); }
 
+function editHabit(id) {
+  const h = habits.find(x => x.id === id);
+  if (!h) return;
+  editingHabitId = id;
+  document.getElementById('mh-name').value = h.name;
+  document.getElementById('mh-emoji').value = h.emoji;
+  const t = document.querySelector('#m-habit .modal-title');
+  if (t) t.textContent = 'Edit Habit';
+  openModal('m-habit');
+}
+
 function addHabit() {
   const name = document.getElementById('mh-name').value.trim();
   const emoji = document.getElementById('mh-emoji').value.trim() || '\u2b50';
   if (!name) return;
-  habits.push({ id: Date.now(), name, emoji });
+  if (editingHabitId) {
+    const h = habits.find(x => x.id === editingHabitId);
+    if (h) Object.assign(h, { name, emoji });
+    editingHabitId = null;
+    const t = document.querySelector('#m-habit .modal-title');
+    if (t) t.textContent = 'Add Habit';
+  } else {
+    habits.push({ id: Date.now(), name, emoji });
+  }
   S.set('habits', habits);
   closeModal('m-habit');
   renderHabits();
@@ -1010,6 +1030,8 @@ function deleteHabit(id) {
 
 // ===== BUDGET =====
 function renderBudget() {
+  const bml = document.getElementById('budget-month-label');
+  if (bml) bml.textContent = MONTHS_SV[new Date().getMonth()] + ' ' + new Date().getFullYear();
   let inc = 0, exp = 0, sav = 0;
   budget.forEach(b => { if (b.dir === 'income') inc += b.amount; else if (b.dir === 'expense') exp += b.amount; else sav += b.amount; });
   const bal = inc - exp - sav;
@@ -1027,7 +1049,10 @@ function renderBudget() {
       <td><span class="tag ${cls}">${lbl}</span></td>
       <td><span class="tag tag-cat">${escHtml(b.cat)}</span></td>
       <td class="${net > 0 ? 'amount-pos' : 'amount-neg'}">${net > 0 ? '+' : ''}${fmtKr(net)}</td>
-      <td><button onclick="deleteBudget(${b.id})" style="background:none;border:none;color:var(--tl);cursor:pointer;font-size:12px">\u2715</button></td>
+      <td style="display:flex;gap:4px;align-items:center">
+        <button onclick="editBudget(${b.id})" style="background:none;border:none;color:var(--tl);cursor:pointer;font-size:12px" title="Edit">✏️</button>
+        <button onclick="deleteBudget(${b.id})" style="background:none;border:none;color:var(--tl);cursor:pointer;font-size:12px">\u2715</button>
+      </td>
     </tr>`;
   }).join('');
 }
@@ -1038,10 +1063,31 @@ function addBudget() {
   const dir = document.getElementById('mb-dir').value;
   const cat = document.getElementById('mb-cat').value.trim() || '\u00d6vrigt';
   if (!name) return;
-  budget.push({ id: Date.now(), name, amount, dir, cat });
+  if (editingBudgetId) {
+    const b = budget.find(x => x.id === editingBudgetId);
+    if (b) Object.assign(b, { name, amount, dir, cat });
+    editingBudgetId = null;
+    const t = document.querySelector('#m-budget .modal-title');
+    if (t) t.textContent = 'Add Budget Item';
+  } else {
+    budget.push({ id: Date.now(), name, amount, dir, cat });
+  }
   S.set('budget', budget);
   closeModal('m-budget');
   renderBudget();
+}
+
+function editBudget(id) {
+  const b = budget.find(x => x.id === id);
+  if (!b) return;
+  editingBudgetId = id;
+  document.getElementById('mb-name').value = b.name;
+  document.getElementById('mb-amount').value = b.amount;
+  document.getElementById('mb-dir').value = b.dir;
+  document.getElementById('mb-cat').value = b.cat;
+  const t = document.querySelector('#m-budget .modal-title');
+  if (t) t.textContent = 'Edit Budget Item';
+  openModal('m-budget');
 }
 
 function deleteBudget(id) {
@@ -1204,6 +1250,7 @@ function buildClassExams(cls) {
           <input type="checkbox" ${e.done ? 'checked' : ''} onchange="toggleExam(${e.id})" style="width:18px;height:18px;accent-color:var(--teal);cursor:pointer;flex-shrink:0">
           <div class="exam-title" style="flex:1;font-size:15px">${escHtml(e.title)}</div>
           <div style="font-size:13px;color:var(--tl);white-space:nowrap">${e.date}</div>
+          <button onclick="editExam(${e.id})" style="background:none;border:none;color:var(--tl);cursor:pointer;font-size:13px" title="Edit">✏️</button>
           <button onclick="removeExam(${e.id})" style="background:none;border:none;color:var(--tl);cursor:pointer;font-size:13px">✕</button>
         </div>`).join('')
     : '<div style="color:var(--tl);font-style:italic;font-size:14px;padding:16px 0">No exams or deadlines yet.</div>';
@@ -1378,12 +1425,32 @@ function openAddExam(classId) {
   document.getElementById('m-add-exam').dataset.classId = classId;
 }
 
+function editExam(id) {
+  const e = classExams.find(x => x.id === id);
+  if (!e) return;
+  editingExamId = id;
+  document.getElementById('ae-title').value = e.title;
+  document.getElementById('ae-date').value = e.date;
+  document.getElementById('m-add-exam').dataset.classId = e.classId;
+  const t = document.querySelector('#m-add-exam .modal-title');
+  if (t) t.textContent = 'Edit Exam';
+  openModal('m-add-exam');
+}
+
 function addExam() {
   const classId = parseInt(document.getElementById('m-add-exam').dataset.classId);
   const title = document.getElementById('ae-title').value.trim();
   const date = document.getElementById('ae-date').value;
   if (!title || !date) return;
-  classExams.push({ id: Date.now(), classId, title, date, done: false });
+  if (editingExamId) {
+    const e = classExams.find(x => x.id === editingExamId);
+    if (e) Object.assign(e, { title, date });
+    editingExamId = null;
+    const t = document.querySelector('#m-add-exam .modal-title');
+    if (t) t.textContent = 'Add Exam / Deadline';
+  } else {
+    classExams.push({ id: Date.now(), classId, title, date, done: false });
+  }
   S.set('classExams', classExams);
   closeModal('m-add-exam');
   renderClassContent();
@@ -1734,6 +1801,10 @@ function deleteNote(id) {
 
 // ===== PLANNER =====
 function renderPlanner() {
+  const pml = document.getElementById('planner-month-label');
+  if (pml) pml.textContent = 'Monthly overview \u00b7 ' + MONTHS_SV[calM] + ' ' + calY;
+  const sml = document.getElementById('schedule-month-label');
+  if (sml) sml.textContent = MONTHS_SV[new Date().getMonth()];
   renderCal();
   renderSchedule();
   renderPlannerBudgetSnap();
@@ -1808,6 +1879,7 @@ function renderCalMonth() {
       `<div class="cal-event-item">
         <span>📅 ${e.date.slice(5)} · ${escHtml(e.title)}</span>
         <div style="display:flex;gap:4px">
+          <button onclick="editCalEvent(${e.id})" style="background:none;border:none;color:var(--tl);cursor:pointer;font-size:11px" title="Edit">✏️</button>
           <button onclick="duplicateCalEvent(${e.id})" style="background:none;border:none;color:var(--tl);cursor:pointer;font-size:10px" title="Duplicate">⧉</button>
           <button onclick="removeCalEvent(${e.id})" style="background:none;border:none;color:var(--tl);cursor:pointer;font-size:11px">✕</button>
         </div>
@@ -1917,8 +1989,9 @@ function renderSchedule() {
       (day.classes || []).forEach((cls, clsIdx) => {
         const matchedClass = classes.find(c => cls.includes(c.name));
         const pillColor = matchedClass?.color ? `background:${matchedClass.color}20;color:${matchedClass.color};border:1px solid ${matchedClass.color}40` : '';
-        html += `<span class="class-pill" ${pillColor ? `style="${pillColor}"` : ''}>${escHtml(cls)}`;
+        html += `<span class="class-pill" ${pillColor ? `style="${pillColor}"` : ''}><span id="scls-${week.id}-${dayIdx}-${clsIdx}" ondblclick="inlineEditSchedClass(${week.id},${dayIdx},${clsIdx})" title="Double-click to edit">${escHtml(cls)}</span>`;
         if (schedEditMode) {
+          html += `<button onclick="inlineEditSchedClass(${week.id},${dayIdx},${clsIdx})" class="sched-pill-del" title="Edit" style="color:var(--tl)">✏️</button>`;
           html += `<button onclick="removeScheduleClass(${week.id},${dayIdx},${clsIdx})" class="sched-pill-del" title="Remove">\u2715</button>`;
         }
         html += '</span>';
@@ -1936,6 +2009,30 @@ function renderSchedule() {
 
   html += '</table></div></div>';
   el.innerHTML = html;
+}
+
+function inlineEditSchedClass(weekId, dayIdx, clsIdx) {
+  const span = document.getElementById(`scls-${weekId}-${dayIdx}-${clsIdx}`);
+  if (!span) return;
+  const week = schedule.find(w => w.id === weekId);
+  if (!week) return;
+  const current = week.days[dayIdx]?.classes[clsIdx] || '';
+  const input = document.createElement('input');
+  input.value = current;
+  input.style.cssText = 'width:100px;font-size:11px;border:1px solid var(--teal);border-radius:3px;padding:1px 4px;background:var(--warm-white);color:var(--td);outline:none';
+  span.replaceWith(input);
+  input.focus();
+  input.select();
+  const save = () => {
+    const val = input.value.trim();
+    if (val && week.days[dayIdx]) {
+      week.days[dayIdx].classes[clsIdx] = val;
+      S.set('schedule', schedule);
+    }
+    renderSchedule();
+  };
+  input.addEventListener('blur', save);
+  input.addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); save(); } if (e.key === 'Escape') renderSchedule(); });
 }
 
 function toggleSchedEditMode() {
@@ -2035,8 +2132,9 @@ function renderRadio() {
   const el = document.getElementById('radio-stations');
   if (!el) return;
   el.innerHTML = radioStations.map((s, i) => `
-    <span class="radio-stn-wrap">
-      <button class="radio-stn${currentStation === i ? ' playing' : ''}" onclick="playStation(${i})">${escHtml(s.name)}</button>${radioEditMode ? `<button onclick="removeRadioStation(${i})" class="radio-stn-del" title="Remove">\u2715</button>` : ''}
+    <span class="radio-stn-wrap" id="rstn-wrap-${i}">
+      <button class="radio-stn${currentStation === i ? ' playing' : ''}" onclick="playStation(${i})">${escHtml(s.name)}</button>
+      ${radioEditMode ? `<button onclick="inlineEditStation(${i})" class="radio-stn-del" title="Edit" style="background:none;border:none;color:var(--tl);cursor:pointer;font-size:11px;padding:2px 4px">✏️</button><button onclick="removeRadioStation(${i})" class="radio-stn-del" title="Remove">\u2715</button>` : ''}
     </span>
   `).join('');
   const editBtn = document.getElementById('radio-edit-btn');
@@ -2072,6 +2170,26 @@ function addRadioStation() {
   S.set('radioStations', radioStations);
   document.getElementById('radio-new-name').value = '';
   document.getElementById('radio-new-url').value = '';
+  renderRadio();
+}
+
+function inlineEditStation(i) {
+  const wrap = document.getElementById(`rstn-wrap-${i}`);
+  if (!wrap) return;
+  const s = radioStations[i];
+  wrap.innerHTML = `
+    <input id="re-name-${i}" value="${escHtml(s.name)}" style="width:80px;font-size:12px;border:1px solid var(--border);border-radius:4px;padding:2px 4px;background:var(--warm-white);color:var(--td)">
+    <input id="re-url-${i}" value="${escHtml(s.url)}" style="width:130px;font-size:11px;border:1px solid var(--border);border-radius:4px;padding:2px 4px;background:var(--warm-white);color:var(--td)">
+    <button onclick="saveStation(${i})" style="background:var(--teal);color:white;border:none;border-radius:4px;padding:2px 6px;cursor:pointer;font-size:11px">✓</button>
+    <button onclick="renderRadio()" style="background:none;border:none;color:var(--tl);cursor:pointer;font-size:11px">✕</button>`;
+}
+
+function saveStation(i) {
+  const name = document.getElementById(`re-name-${i}`)?.value.trim();
+  const url = document.getElementById(`re-url-${i}`)?.value.trim();
+  if (!name || !url) return;
+  radioStations[i] = { name, url };
+  S.set('radioStations', radioStations);
   renderRadio();
 }
 
@@ -2269,6 +2387,21 @@ function openAddCalEvent(day, month, year) {
   openModal('m-cal-event');
 }
 
+function editCalEvent(id) {
+  const e = calManualEvents.find(x => x.id === id);
+  if (!e) return;
+  editingCalEventId = id;
+  document.getElementById('mce-title').value = e.title;
+  document.getElementById('mce-date').value = e.date;
+  if (document.getElementById('mce-time')) document.getElementById('mce-time').value = e.time || '';
+  if (document.getElementById('mce-recurrence')) document.getElementById('mce-recurrence').value = 'none';
+  populateClassDropdowns();
+  if (document.getElementById('mce-class') && e.classId) document.getElementById('mce-class').value = e.classId;
+  const tl = document.querySelector('#m-cal-event .modal-title');
+  if (tl) tl.textContent = 'Edit Event';
+  openModal('m-cal-event');
+}
+
 function addCalEvent() {
   const title = document.getElementById('mce-title').value.trim();
   const date = document.getElementById('mce-date').value;
@@ -2276,6 +2409,18 @@ function addCalEvent() {
   const recurrence = document.getElementById('mce-recurrence')?.value || 'none';
   const classId = parseInt(document.getElementById('mce-class')?.value || '') || null;
   if (!title || !date) return;
+
+  if (editingCalEventId) {
+    const e = calManualEvents.find(x => x.id === editingCalEventId);
+    if (e) Object.assign(e, { title, date, time, classId });
+    editingCalEventId = null;
+    const tl = document.querySelector('#m-cal-event .modal-title');
+    if (tl) tl.textContent = 'Add Event';
+    S.set('calManualEvents', calManualEvents);
+    closeModal('m-cal-event');
+    renderCal(); renderWidgets();
+    return;
+  }
 
   const baseEvent = { id: Date.now(), date, title, time, classId };
   calManualEvents.push(baseEvent);
@@ -2687,6 +2832,23 @@ function performSearch(q) {
   ).join('');
 }
 
+// ===== PROFILE NAME / SUBTITLE =====
+function renderProfileInfo() {
+  const nameEl = document.getElementById('sb-profile-name');
+  const subEl  = document.getElementById('sb-profile-sub');
+  if (nameEl) {
+    nameEl.textContent = profileName;
+    nameEl.onblur = () => { profileName = nameEl.textContent.trim() || 'Sofia Merdovic'; S.set('profileName', profileName); };
+  }
+  if (subEl) {
+    subEl.textContent = profileSub;
+    subEl.onblur = () => { profileSub = subEl.textContent.trim() || 'Life Planner'; S.set('profileSub', profileSub); };
+  }
+  // Hero title on home page
+  const heroTitle = document.querySelector('.hero-title');
+  if (heroTitle) heroTitle.textContent = profileName + "'s Life Planner";
+}
+
 // ===== SIDEBAR DATE =====
 function updateSbDate() {
   const el = document.getElementById('sb-date');
@@ -2787,10 +2949,26 @@ function renderTasks() {
       </div>
       <div style="display:flex;gap:4px;align-items:flex-start;flex-shrink:0">
         <div class="task-prio-dot" style="background:${prioColor[t.priority||'none']}"></div>
+        <button onclick="editTask(${t.id})" style="background:none;border:none;color:var(--tl);cursor:pointer;font-size:12px" title="Edit">✏️</button>
         <button onclick="deleteTask(${t.id})" style="background:none;border:none;color:var(--tl);cursor:pointer;font-size:12px">✕</button>
       </div>
     </div>
   `).join('');
+}
+
+function editTask(id) {
+  const t = tasks.find(x => x.id === id);
+  if (!t) return;
+  editingTaskId = id;
+  if (document.getElementById('mt-title')) document.getElementById('mt-title').value = t.title;
+  if (document.getElementById('mt-priority')) document.getElementById('mt-priority').value = t.priority || 'none';
+  if (document.getElementById('mt-due')) document.getElementById('mt-due').value = t.dueDate || '';
+  if (document.getElementById('mt-subtasks')) document.getElementById('mt-subtasks').value = (t.subtasks||[]).map(s=>s.title).join('\n');
+  populateClassDropdowns();
+  if (document.getElementById('mt-class') && t.classId) document.getElementById('mt-class').value = t.classId;
+  const tl = document.querySelector('#m-add-task .modal-title');
+  if (tl) tl.textContent = 'Edit Task';
+  openModal('m-add-task');
 }
 
 function addTask() {
@@ -2801,7 +2979,15 @@ function addTask() {
   const classId = parseInt(document.getElementById('mt-class')?.value || '') || null;
   const subtasksRaw = document.getElementById('mt-subtasks')?.value.trim() || '';
   const subtasks = subtasksRaw ? subtasksRaw.split('\n').filter(Boolean).map(s => ({ title: s.trim(), done: false })) : [];
-  tasks.unshift({ id: Date.now(), title, priority, dueDate, classId, subtasks, done: false });
+  if (editingTaskId) {
+    const t = tasks.find(x => x.id === editingTaskId);
+    if (t) Object.assign(t, { title, priority, dueDate, classId, subtasks });
+    editingTaskId = null;
+    const tl = document.querySelector('#m-add-task .modal-title');
+    if (tl) tl.textContent = 'Add Task';
+  } else {
+    tasks.unshift({ id: Date.now(), title, priority, dueDate, classId, subtasks, done: false });
+  }
   S.set('tasks', tasks);
   closeModal('m-add-task');
   ['mt-title','mt-due','mt-subtasks'].forEach(id => { const e = document.getElementById(id); if (e) e.value = ''; });
@@ -2885,6 +3071,7 @@ function scheduleExamNotifications() {
 window.addEventListener('load', () => {
   updateSbDate();
   renderProfilePhoto();
+  renderProfileInfo();
   renderSbUpcoming();
 
   document.querySelectorAll('.sb-item[data-view]').forEach(item => {
@@ -2927,6 +3114,19 @@ window.addEventListener('load', () => {
       if (window.innerWidth <= 768) document.getElementById('sidebar')?.classList.remove('open');
     });
   });
+
+  // One-time migration: move old moodboardImages into scrapbookPhotos
+  if (moodboardImages.length && !S.get('mbMigrated')) {
+    moodboardImages.forEach((img, i) => {
+      if (!scrapbookPhotos.find(p => p.id === img.id)) {
+        scrapbookPhotos.push({ id: img.id, url: img.url, caption: '', date: '', x: img.x || (i % 4) * 26, y: img.y || Math.floor(i / 4) * 220 + 10, w: img.w || 22 });
+      }
+    });
+    moodboardImages = [];
+    S.set('scrapbookPhotos', scrapbookPhotos);
+    S.set('moodboardImages', []);
+    S.set('mbMigrated', true);
+  }
 
   nav('home');
 });

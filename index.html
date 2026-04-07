@@ -37,8 +37,8 @@
       <span class="sb-photo-placeholder">🐚</span>
     </div>
     <div class="sb-info">
-      <div class="sb-name">Sofia Merdovic</div>
-      <div class="sb-sub">Life Planner</div>
+      <div class="sb-name" id="sb-profile-name" contenteditable="true" spellcheck="false" title="Click to edit name"></div>
+      <div class="sb-sub" id="sb-profile-sub" contenteditable="true" spellcheck="false" title="Click to edit subtitle"></div>
     </div>
   </div>
 
@@ -266,7 +266,7 @@
   <div class="view-hero h-budget" id="hero-budget"><button class="hero-edit-btn" onclick="setHeaderImage('budget')">✎ Edit header</button><div class="page-icon">💰</div></div>
   <div class="view-content">
     <h2 class="view-title">Budget – Lön & Räkningar</h2>
-    <div class="pmeta">Mars 2026</div>
+    <div class="pmeta" id="budget-month-label"></div>
     <div class="bud-stats">
       <div class="bstat"><div class="bstat-label">Inkomst</div><div class="bstat-value income-color" id="bi-total">0 kr</div></div>
       <div class="bstat"><div class="bstat-label">Utgifter</div><div class="bstat-value expense-color" id="be-total">0 kr</div></div>
@@ -417,7 +417,7 @@
   <div class="view-hero h-life" id="hero-planner"><button class="hero-edit-btn" onclick="setHeaderImage('planner')">✎ Edit header</button><div class="page-icon">📅</div></div>
   <div class="view-content">
     <h2 class="view-title">Life Planner</h2>
-    <div class="pmeta">Monthly overview · Mars 2026</div>
+    <div class="pmeta" id="planner-month-label"></div>
     <div class="planner-layout">
       <!-- Calendar column -->
       <div>
@@ -453,7 +453,7 @@
       <!-- Schedule column -->
       <div>
         <div class="section-header" style="margin-bottom:10px">
-          Class Schedule · <em>Mars</em>
+          Class Schedule · <em id="schedule-month-label"></em>
           <div style="display:flex;gap:5px">
             <button class="btn-link" onclick="openAddSchedWeek()">+ Week</button>
             <button class="btn-link" id="sched-edit-btn" onclick="toggleSchedEditMode()">✎ Edit</button>
