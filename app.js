@@ -12,45 +12,25 @@ let diary    = S.get('diary')   || [{ id: 1, title: 'Wednesday feeling', date: '
 let habits   = S.get('habits')  || [{ id: 1, name: 'Drink Water', emoji: '🫗' }, { id: 2, name: 'Skincare (Morning)', emoji: '🧴' }, { id: 3, name: 'Brush Teeth', emoji: '🪥' }, { id: 4, name: 'Workout', emoji: '🏋️' }, { id: 5, name: '10.000 Steps', emoji: '🚶' }, { id: 6, name: 'Study (1 hour)', emoji: '📖' }, { id: 7, name: 'Skincare (Night)', emoji: '🌙' }, { id: 8, name: 'Read', emoji: '📚' }];
 let hChecks  = S.get('hChecks') || {};
 let budget   = S.get('budget')  || [{ id: 1, name: 'Lön', amount: 13804, dir: 'income', cat: 'Bas Inkomst' }, { id: 2, name: 'GYM', amount: 500, dir: 'expense', cat: 'Prenumeration' }, { id: 3, name: 'HBO', amount: 89, dir: 'expense', cat: 'Prenumeration' }, { id: 4, name: 'Claude', amount: 244.37, dir: 'expense', cat: 'Prenumeration' }, { id: 5, name: 'Notion', amount: 324, dir: 'expense', cat: 'Prenumeration' }, { id: 6, name: 'Opti Sparande', amount: 1115, dir: 'saving', cat: 'Sparande' }, { id: 7, name: 'Hus sparande', amount: 5000, dir: 'saving', cat: 'Sparande' }, { id: 8, name: 'Storytel', amount: 99, dir: 'expense', cat: 'Prenumeration' }, { id: 9, name: 'Sparande (extra)', amount: 300, dir: 'saving', cat: 'Sparande' }];
-let photos   = S.get('photos')  || [];
+// photos (legacy) removed — all photos now in scrapbookPhotos
 
 // Class Schedule – stored in localStorage, editable via UI
-let schedule = S.get('schedule') || [
-  { id: 1, week: 'V6', days: [
-    { date: '9.2',  classes: ['13\u201314 Tr\u00e4ff 1', 'Weekcomm M'] },
-    { date: '10.2', classes: ['10\u201312 Pluggstuga'] },
-    { date: '11.2', classes: ['13\u201314 Pluggstuga'] },
-    { date: '12.2', classes: [] },
-    { date: '13.2', classes: ['10\u201311 Pluggstuga'] }
-  ]},
-  { id: 2, week: 'V7', days: [
-    { date: '16.2', classes: ['10\u201311 Pluggstuga'] },
-    { date: '17.2', classes: ['10\u201312 Pluggstuga'] },
-    { date: '18.2', classes: ['10\u201312 Pluggstuga', 'Tr\u00e4ff 4 Arbetslivet'] },
-    { date: '19.2', classes: [] },
-    { date: '20.2', classes: ['10\u201311 Pluggstuga'] }
-  ]},
-  { id: 3, week: 'V8', days: [
-    { date: '23.2', classes: [] },
-    { date: '24.2', classes: ['13\u201315 Tr\u00e4ff 6'] },
-    { date: '25.2', classes: ['13\u201315 Profession'] },
-    { date: '26.2', classes: [] },
-    { date: '27.2', classes: ['10\u201311 Pluggstuga'] }
-  ]},
-  { id: 4, week: 'V9', days: [
-    { date: '2.3', classes: [] },
-    { date: '3.3', classes: [] },
-    { date: '4.3', classes: [] },
-    { date: '5.3', classes: [] },
-    { date: '6.3', classes: [] }
-  ]}
-];
+let schedule = S.get('schedule') || [];
+// One-time migration: clear old hardcoded Feb 2026 default schedule (V6–V9)
+if (schedule.length && schedule[0]?.id === 1 && schedule[0]?.week === 'V6' && !S.get('schedCleared')) {
+  schedule = [];
+  S.set('schedule', schedule);
+  S.set('schedCleared', true);
+}
 
 let curNote  = null, curDiary = null;
 let hWkOff   = 0;
 let editMode = false;
-let journalMoods = S.get('journalMoods') || {};
+// journalMoods key removed — mood data lives in diary[].mood, rendered via renderMoodTrend()
 let schedEditMode = false;
+let schedWeekIdx = 0; // which week is currently shown in the schedule
+let schedHistory = S.get('schedHistory') || []; // archived past weeks
+let schedShowHistory = false;
 let radioEditMode = false;
 
 // Calendar – always initialise to the current month/year
@@ -59,8 +39,17 @@ let calY = _calInit.getFullYear(), calM = _calInit.getMonth();
 const MONTHS_SV = ['Januari','Februari','Mars','April','Maj','Juni','Juli','Augusti','September','Oktober','November','December'];
 const DAYS_SV = ['M\u00e5n','Tis','Ons','Tor','Fre','L\u00f6r','S\u00f6n'];
 
-// Pomodoro
-let pom = { running: false, mode: 'work', total: 25 * 60, rem: 25 * 60, int: null, ses: 0, mins: 0 };
+// Pomodoro — restore persisted state across navigation and refresh
+const _savedPom = S.get('pomState') || {};
+let pom = {
+  running: false,
+  mode:  _savedPom.mode  || 'work',
+  total: _savedPom.total || 25 * 60,
+  rem:   _savedPom.rem   || _savedPom.total || 25 * 60,
+  int:   null,
+  ses:   _savedPom.ses   || 0,
+  mins:  _savedPom.mins  || 0
+};
 
 // Google Calendar – token is in-memory only (expires after 1 h, not persisted)
 let gcalToken = null;
@@ -104,6 +93,8 @@ let pinterestBoardUrl = S.get('pinterestBoard') || '';
 
 // Header images per page
 let headerImages = S.get('headerImages') || {};
+let headerPositions = S.get('headerPositions') || {}; // 0–100 percentage Y
+let headerFit = S.get('headerFit') || {}; // 'cover' | 'contain'
 let pendingHeaderView = null;
 
 // Scrapbook
@@ -113,6 +104,7 @@ let scrapbookPhotos = S.get('scrapbookPhotos') || [];
 let classes = S.get('classes') || [];
 let classExams = S.get('classExams') || [];
 let classGrades = S.get('classGrades') || [];
+let classTranscriptions = S.get('classTranscriptions') || [];
 let activeClassId = null;
 let activeClassSection = 'notes';
 
@@ -122,7 +114,7 @@ let tasks = S.get('tasks') || [];
 // Dark mode
 let darkMode = S.get('darkMode') || false;
 
-// Calendar view
+// Calendar view — default to month
 let calView = 'month'; // 'month' | 'week' | 'day'
 
 // Notes search
@@ -164,6 +156,9 @@ function nav(page) {
   if (el) el.classList.add('active');
   const navEl = document.querySelector(`.sb-item[data-view="${page}"]`);
   if (navEl) navEl.classList.add('active');
+  // Persist the view so reload returns here
+  const persistable = ['home','today','journal','habits','budget','study','notes','tasks','planner','scrapbook'];
+  if (persistable.includes(page)) S.set('lastView', page);
   const fns = {
     home: renderHome,
     today: renderToday,
@@ -177,9 +172,30 @@ function nav(page) {
     scrapbook: renderScrapbook,
   };
   if (fns[page]) fns[page]();
+  // Clear unsaved journal photo attachments when leaving the journal
+  if (page !== 'journal') {
+    pendingJournalPhotos = [];
+    document.querySelectorAll('.journal-photo-count').forEach(el => { el.textContent = ''; });
+  }
 }
 
 // ===== TODAY VIEW =====
+
+// Returns today's class entries from the schedule array (handles YYYY-MM-DD and legacy d.m formats)
+function getTodayScheduleClasses() {
+  const today = new Date();
+  const todayStr = today.toLocaleDateString('sv-SE');
+  const legacyStr = `${today.getDate()}.${today.getMonth() + 1}`;
+  for (const week of schedule) {
+    for (const day of (week.days || [])) {
+      if (day.date === todayStr || day.date === legacyStr) {
+        return day.classes || [];
+      }
+    }
+  }
+  return [];
+}
+
 function renderToday() {
   const now = new Date();
   const todayStr = now.toLocaleDateString('sv-SE');
@@ -188,12 +204,28 @@ function renderToday() {
   const body = document.getElementById('today-body');
   if (!body) return;
 
-  // Today's events
+  // Today's events — manual + GCal, sorted by time
   const todayEvs = calManualEvents.filter(e => e.date === todayStr);
-  const gcalToday = gcalEvents.filter(e => { const d = new Date(e.start?.dateTime || e.start?.date); return d.toLocaleDateString('sv-SE') === todayStr; });
-  const evHtml = [...todayEvs.map(e => `<div class="today-event-row"><span class="today-time-tag">${e.time || 'All day'}</span><span>${escHtml(e.title)}</span></div>`),
-    ...gcalToday.map(e => { const h = e.start?.dateTime ? new Date(e.start.dateTime).toLocaleTimeString('sv-SE',{hour:'2-digit',minute:'2-digit'}) : 'All day'; return `<div class="today-event-row"><span class="today-time-tag">${h}</span><span>${escHtml(e.summary||'Event')}</span><span style="font-size:10px;color:var(--teal);margin-left:auto">GCal</span></div>`; })
-  ].join('') || '<div style="font-size:13px;color:var(--tl);font-style:italic">No events today</div>';
+  const manualGcalToday = manualGcalEvents.filter(e => e.date === todayStr);
+  const gcalToday = gcalEvents.filter(e => {
+    const d = new Date(e.start?.dateTime || e.start?.date);
+    return d.toLocaleDateString('sv-SE') === todayStr;
+  });
+  const allTodayEvents = [
+    ...todayEvs.map(e => ({ time: e.time || '00:00', title: e.title, tag: '' })),
+    ...manualGcalToday.map(e => ({ time: e.time || '00:00', title: e.title, tag: '' })),
+    ...gcalToday.map(e => {
+      const h = e.start?.dateTime ? new Date(e.start.dateTime).toLocaleTimeString('sv-SE',{hour:'2-digit',minute:'2-digit'}) : '00:00';
+      return { time: h, title: e.summary || 'Event', tag: '<span style="font-size:10px;color:var(--teal);margin-left:auto">GCal</span>' };
+    })
+  ].sort((a,b) => a.time.localeCompare(b.time));
+
+  const gcalStatus = !gcalToken && gcalClientId
+    ? '<div style="font-size:11px;color:var(--tl);margin-top:4px">GCal reconnecting… click "Google Cal" in sidebar if events are missing.</div>'
+    : '';
+  const evHtml = (allTodayEvents.length
+    ? allTodayEvents.map(e => `<div class="today-event-row"><span class="today-time-tag">${e.time === '00:00' ? 'All day' : e.time}</span><span>${escHtml(e.title)}</span>${e.tag}</div>`).join('')
+    : '<div style="font-size:13px;color:var(--tl);font-style:italic">No events today</div>') + gcalStatus;
 
   // Habits
   const habitHtml = habits.slice(0, 8).map(h => {
@@ -204,23 +236,57 @@ function renderToday() {
     </div>`;
   }).join('') || '<div style="font-size:13px;color:var(--tl);font-style:italic">No habits set up</div>';
 
-  // Tasks due today or overdue
-  const overdue = tasks.filter(t => !t.done && t.due && t.due <= todayStr);
-  const taskHtml = overdue.length
-    ? overdue.map(t => `<div class="today-event-row"><span style="font-size:10px;font-weight:700;color:${t.due < todayStr ? 'var(--rose)' : 'var(--teal)'};min-width:54px">${t.due < todayStr ? 'OVERDUE' : 'TODAY'}</span><span>${escHtml(t.title)}</span></div>`).join('')
-    : '<div style="font-size:13px;color:var(--tl);font-style:italic">No tasks due today</div>';
+  // Tasks — overdue first (red), then due today (teal), then no-due incomplete tasks
+  const overdueTasks = tasks.filter(t => !t.done && t.due && t.due < todayStr);
+  const todayTasks = tasks.filter(t => !t.done && t.due === todayStr);
+  const noDueTasks = tasks.filter(t => !t.done && !t.due).slice(0, 3);
+  const allDisplayTasks = [...overdueTasks, ...todayTasks, ...noDueTasks];
+  const taskHtml = allDisplayTasks.length
+    ? allDisplayTasks.map(t => {
+        const label = t.due < todayStr ? 'OVERDUE' : t.due === todayStr ? 'TODAY' : 'NO DUE';
+        const color = t.due < todayStr ? 'var(--rose)' : t.due === todayStr ? 'var(--teal)' : 'var(--tl)';
+        return `<div class="today-event-row">
+          <span style="font-size:10px;font-weight:700;color:${color};min-width:54px">${label}</span>
+          <span style="font-size:13px">${escHtml(t.title)}</span>
+          ${t.priority ? `<span style="font-size:10px;color:var(--tl);margin-left:auto">${t.priority}</span>` : ''}
+        </div>`;
+      }).join('')
+    : '<div style="font-size:13px;color:var(--tl);font-style:italic">All tasks done ✓</div>';
 
-  // Next exam
-  const nextExam = classExams.filter(e => !e.done && e.date >= todayStr).sort((a,b) => a.date.localeCompare(b.date))[0];
-  const examHtml = nextExam
-    ? (() => { const cls = classes.find(c => c.id === nextExam.classId); const days = Math.round((new Date(nextExam.date) - now) / 86400000); return `<div class="today-event-row"><span class="today-time-tag" style="color:${days <= 3 ? 'var(--rose)' : 'var(--teal)'}">in ${days}d</span><span>${escHtml(nextExam.title)}</span><span class="upcoming-cls" style="margin-left:auto">${cls ? escHtml(cls.name) : ''}</span></div>`; })()
-    : '<div style="font-size:13px;color:var(--tl);font-style:italic">No upcoming exams</div>';
+  // Classes today from schedule
+  const todayClasses = getTodayScheduleClasses();
+  const classHtml = todayClasses.length
+    ? todayClasses.map(c => {
+        const cls = classes.find(mc => c.includes(mc.name));
+        const clickAttr = cls ? `onclick="openClassInStudyHub(${cls.id})" style="cursor:pointer;text-decoration:underline dotted;text-underline-offset:2px"` : '';
+        return `<div class="today-event-row"><span class="today-time-tag" style="color:var(--warm-d,#92400e)">Class</span><span ${clickAttr} title="${cls ? 'Open in Study Hub' : ''}">${escHtml(c)}</span></div>`;
+      }).join('')
+    : '<div style="font-size:13px;color:var(--tl);font-style:italic">No classes scheduled today</div>';
+
+  // Exams — today's shown urgent, then next upcoming
+  const todayExams = classExams.filter(e => !e.done && e.date === todayStr);
+  const nextExam = classExams.filter(e => !e.done && e.date > todayStr).sort((a,b) => a.date.localeCompare(b.date))[0];
+  const examRows = [
+    ...todayExams.map(e => {
+      const cls = classes.find(c => c.id === e.classId);
+      const clsClick = cls ? `onclick="openClassInStudyHub(${cls.id})" style="cursor:pointer;text-decoration:underline dotted;text-underline-offset:2px"` : '';
+      return `<div class="today-event-row" style="background:rgba(244,63,94,.07);border-radius:6px;padding:4px 6px"><span class="today-time-tag" style="color:var(--rose);min-width:54px">TODAY</span><span style="font-weight:600">${escHtml(e.title)}</span>${cls ? `<span ${clsClick} style="font-size:10px;color:var(--tl);margin-left:auto${cls ? ';cursor:pointer' : ''}">${escHtml(cls.name)}</span>` : ''}</div>`;
+    }),
+    nextExam ? (() => {
+      const cls = classes.find(c => c.id === nextExam.classId);
+      const clsClick = cls ? `onclick="openClassInStudyHub(${cls.id})" style="cursor:pointer;text-decoration:underline dotted;text-underline-offset:2px"` : '';
+      const daysUntil = Math.round((new Date(nextExam.date) - now) / 86400000);
+      return `<div class="today-event-row"><span class="today-time-tag" style="color:${daysUntil <= 3 ? 'var(--rose)' : 'var(--teal)'}">in ${daysUntil}d</span><span>${escHtml(nextExam.title)}</span>${cls ? `<span ${clsClick} style="font-size:10px;color:var(--tl);margin-left:auto">${escHtml(cls.name)}</span>` : ''}</div>`;
+    })() : null
+  ].filter(Boolean).join('');
+  const examHtml = examRows || '<div style="font-size:13px;color:var(--tl);font-style:italic">No upcoming exams</div>';
 
   body.innerHTML = `
-    <div class="today-section"><div class="today-section-title">Events</div>${evHtml}</div>
+    <div class="today-section"><div class="today-section-title">Classes Today</div>${classHtml}</div>
+    <div class="today-section"><div class="today-section-title">Events & Google Calendar</div>${evHtml}</div>
+    <div class="today-section"><div class="today-section-title">Tasks</div>${taskHtml}</div>
     <div class="today-section"><div class="today-section-title">Habits</div>${habitHtml}</div>
-    <div class="today-section"><div class="today-section-title">Tasks due today</div>${taskHtml}</div>
-    <div class="today-section"><div class="today-section-title">Next exam</div>${examHtml}</div>
+    <div class="today-section"><div class="today-section-title">Exams</div>${examHtml}</div>
   `;
 }
 
@@ -274,7 +340,6 @@ function renderWidgets() {
     grid.classList.remove('edit-mode');
   }
   initDragDrop();
-  renderMoodboard();
 }
 
 function buildWidget(id) {
@@ -443,18 +508,85 @@ function buildCalHtml(now) {
       const ed = new Date(e.start?.dateTime || e.start?.date);
       return ed.getDate() === d && ed.getMonth() === calM && ed.getFullYear() === calY;
     });
-    // Collect event colors for this day
     const evColors = [];
     calManualEvents.filter(e => { const ed = new Date(e.date); return ed.getDate() === d && ed.getMonth() === calM && ed.getFullYear() === calY; })
       .forEach(e => { const cls = classes.find(c => e.classId === c.id); evColors.push(cls?.color || 'var(--warm)'); });
     gcalEvents.filter(e => { const ed = new Date(e.start?.dateTime || e.start?.date); return ed.getDate() === d && ed.getMonth() === calM && ed.getFullYear() === calY; })
       .forEach(() => evColors.push('var(--teal)'));
     const dots = evColors.slice(0, 3).map(c => `<span class="cal-dot" style="background:${c}"></span>`).join('');
-    html += `<div class="cal-day${isT ? ' today' : ''}${hasEv ? ' has-event' : ''}" onclick="openAddCalEvent(${d},${calM},${calY})">${d}${dots ? `<div class="cal-dots">${dots}</div>` : ''}</div>`;
+    // Click: if day has events show them in a popup; if empty open add-event modal
+    html += `<div class="cal-day${isT ? ' today' : ''}${hasEv ? ' has-event' : ''}" onclick="calWidgetDayClick(${d},${calM},${calY},${hasEv})">${d}${dots ? `<div class="cal-dots">${dots}</div>` : ''}</div>`;
   }
   html += '</div>';
   return html;
 }
+
+function calWidgetDayClick(d, m, y, hasEv) {
+  if (!hasEv) { openAddCalEvent(d, m, y); return; }
+  const dateStr = `${y}-${String(m+1).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
+  const manual = calManualEvents.filter(e => e.date === dateStr);
+  const gcal = gcalEvents.filter(e => {
+    const ed = new Date(e.start?.dateTime || e.start?.date);
+    return ed.toLocaleDateString('sv-SE') === dateStr;
+  });
+  const dayLabel = new Date(y, m, d).toLocaleDateString('sv-SE', { weekday: 'long', day: 'numeric', month: 'long' });
+  const rows = [
+    ...manual.map(e => `<div class="today-event-row"><span class="today-time-tag">${e.time || 'All day'}</span><span>${escHtml(e.title)}</span><button onclick="removeCalEvent(${e.id});renderWidgets()" style="background:none;border:none;color:var(--tl);cursor:pointer;font-size:10px;margin-left:auto">✕</button></div>`),
+    ...gcal.map(e => { const t = e.start?.dateTime ? new Date(e.start.dateTime).toLocaleTimeString('sv-SE',{hour:'2-digit',minute:'2-digit'}) : 'All day'; return `<div class="today-event-row"><span class="today-time-tag">${t}</span><span>${escHtml(e.summary||'Event')}</span><span style="font-size:10px;color:var(--teal);margin-left:auto">GCal</span></div>`; })
+  ].join('');
+  // Show in a lightweight inline popup anchored to the widget
+  let pop = document.getElementById('cal-widget-popup');
+  if (!pop) { pop = document.createElement('div'); pop.id = 'cal-widget-popup'; document.body.appendChild(pop); }
+  pop.innerHTML = `<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
+    <span style="font-size:13px;font-weight:600;color:var(--td)">${dayLabel}</span>
+    <button onclick="document.getElementById('cal-widget-popup').style.display='none'" style="background:none;border:none;color:var(--tl);cursor:pointer;font-size:16px;line-height:1">✕</button>
+  </div>
+  ${rows}
+  <button class="btn-link" onclick="document.getElementById('cal-widget-popup').style.display='none';openAddCalEvent(${d},${m},${y})" style="width:100%;text-align:center;margin-top:8px;font-size:12px">+ Add event</button>`;
+  pop.style.cssText = 'position:fixed;z-index:9000;background:var(--warm-white,#fff);border:1px solid var(--border);border-radius:12px;padding:14px;box-shadow:0 8px 32px rgba(0,0,0,.15);min-width:260px;max-width:320px;top:50%;left:50%;transform:translate(-50%,-50%)';
+  pop.style.display = 'block';
+  // Close on outside click
+  setTimeout(() => {
+    const close = e => { if (!pop.contains(e.target)) { pop.style.display='none'; document.removeEventListener('click', close); } };
+    document.addEventListener('click', close);
+  }, 0);
+}
+
+// ── Cross-feature navigation helpers ─────────────────────────────────────────
+
+function openJournalForDate(dateStr) {
+  nav('journal');
+  loadJournalDay(dateStr);
+  // Update the journal date label to reflect the selected date
+  const label = document.getElementById('journal-date-label');
+  if (label) {
+    try {
+      const d = new Date(dateStr);
+      label.textContent = d.toLocaleDateString('sv-SE', { weekday: 'long', day: 'numeric', month: 'long' });
+    } catch {}
+  }
+}
+
+function openClassInStudyHub(classId) {
+  nav('study');
+  if (classId) switchClass(classId);
+}
+
+function openClassInStudyHubByName(name) {
+  const cls = classes.find(c => c.name === name);
+  if (cls) openClassInStudyHub(cls.id);
+}
+
+function openPlannerAtDate(dateStr) {
+  try {
+    const d = new Date(dateStr);
+    calY = d.getFullYear(); calM = d.getMonth();
+    calView = 'month';
+  } catch {}
+  nav('planner');
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 
 function calPrev() {
   if (calView === 'week') { calWeekOff--; }
@@ -658,21 +790,6 @@ document.getElementById && window.addEventListener('load', () => {
     this.value = '';
   });
 
-  document.getElementById('scrap-file')?.addEventListener('change', function (e) {
-    const files = Array.from(e.target.files);
-    let done = 0;
-    files.forEach(f => {
-      const r = new FileReader();
-      r.onload = ev => {
-        photos.push(ev.target.result);
-        done++;
-        if (done === files.length) { S.set('photos', photos); renderScrapbook(); }
-      };
-      r.readAsDataURL(f);
-    });
-    this.value = '';
-  });
-
   document.getElementById('journal-photo-file')?.addEventListener('change', function(e) {
     const files = Array.from(e.target.files);
     let done = 0;
@@ -704,6 +821,7 @@ function renderJournal() {
   renderDiaryList();
   renderSbUpcoming();
   setTimeout(renderMoodChart, 50);
+  setTimeout(renderMoodTrend, 60);
 }
 
 function loadJournalDay(date) {
@@ -1107,11 +1225,96 @@ function togglePomCard() {
 
 function toggleToolsCard() {
   const el = document.getElementById('tools-inline-card');
-  if (el) el.style.display = el.style.display === 'none' ? 'block' : 'none';
+  if (el) {
+    const showing = el.style.display !== 'none';
+    el.style.display = showing ? 'none' : 'block';
+    if (!showing) renderStudyTools();
+  }
+}
+
+// ── Study Tools (editable) ────────────────────────────────────────────────────
+const DEFAULT_STUDY_TOOLS = [
+  { id: 1, icon: '🎙️', name: 'Otter.ai', desc: 'Live transcription & meeting notes', url: 'https://otter.ai' },
+  { id: 2, icon: '📖', name: 'Notebook LM', desc: 'AI-powered study notes by Google', url: 'https://notebooklm.google.com' },
+  { id: 3, icon: '🃏', name: 'Anki Web', desc: 'Spaced repetition flashcards', url: 'https://ankiweb.net' },
+  { id: 4, icon: '🤖', name: 'Claude AI', desc: 'Explain concepts, review notes', url: 'https://claude.ai' },
+  { id: 5, icon: '🎓', name: 'ITSLEARNING', desc: 'Course platform', url: 'https://itslearning.com' },
+  { id: 6, icon: '🧪', name: 'Khan Academy', desc: 'Free courses', url: 'https://www.khanacademy.org' },
+];
+let studyTools = S.get('studyTools') || DEFAULT_STUDY_TOOLS;
+
+function saveStudyToolsData() { S.set('studyTools', studyTools); }
+
+function renderStudyTools() {
+  const el = document.getElementById('study-tools-list');
+  if (!el) return;
+  if (!studyTools.length) {
+    el.innerHTML = '<div style="padding:16px;color:var(--tl);font-size:13px">No tools yet. Click + Add to add one.</div>';
+    return;
+  }
+  el.innerHTML = studyTools.map(t => `
+    <div class="study-link" style="position:relative">
+      <a href="${escHtml(t.url)}" target="_blank" style="display:flex;align-items:center;gap:12px;flex:1;text-decoration:none;color:inherit;min-width:0">
+        <span class="sl-icon">${escHtml(t.icon)}</span>
+        <div style="min-width:0"><div class="sl-name">${escHtml(t.name)}</div><div class="sl-desc">${escHtml(t.desc)}</div></div>
+        <span class="sl-arr">→</span>
+      </a>
+      <div style="display:flex;gap:4px;margin-left:8px;flex-shrink:0">
+        <button onclick="editStudyTool(${t.id})" style="background:none;border:none;cursor:pointer;color:var(--tl);font-size:13px;padding:4px" title="Edit">✎</button>
+        <button onclick="deleteStudyTool(${t.id})" style="background:none;border:none;cursor:pointer;color:#c18a8a;font-size:13px;padding:4px" title="Delete">✕</button>
+      </div>
+    </div>`).join('');
+}
+
+let _editingToolId = null;
+
+function openAddStudyTool() {
+  _editingToolId = null;
+  document.getElementById('study-tool-modal-title').textContent = 'Add Study Resource';
+  document.getElementById('st-icon').value = '';
+  document.getElementById('st-name').value = '';
+  document.getElementById('st-desc').value = '';
+  document.getElementById('st-url').value = '';
+  openModal('m-study-tool');
+}
+
+function editStudyTool(id) {
+  const tool = studyTools.find(t => t.id === id);
+  if (!tool) return;
+  _editingToolId = id;
+  document.getElementById('study-tool-modal-title').textContent = 'Edit Study Resource';
+  document.getElementById('st-icon').value = tool.icon;
+  document.getElementById('st-name').value = tool.name;
+  document.getElementById('st-desc').value = tool.desc;
+  document.getElementById('st-url').value = tool.url;
+  openModal('m-study-tool');
+}
+
+function saveStudyTool() {
+  const icon = document.getElementById('st-icon').value.trim() || '🔗';
+  const name = document.getElementById('st-name').value.trim();
+  const desc = document.getElementById('st-desc').value.trim();
+  const url  = document.getElementById('st-url').value.trim();
+  if (!name || !url) return;
+  if (_editingToolId) {
+    const t = studyTools.find(t => t.id === _editingToolId);
+    if (t) { t.icon = icon; t.name = name; t.desc = desc; t.url = url; }
+  } else {
+    studyTools.push({ id: Date.now(), icon, name, desc, url });
+  }
+  saveStudyToolsData();
+  closeModal('m-study-tool');
+  renderStudyTools();
+}
+
+function deleteStudyTool(id) {
+  studyTools = studyTools.filter(t => t.id !== id);
+  saveStudyToolsData();
+  renderStudyTools();
 }
 
 function renderStudy() {
-  if (!activeClassId && classes.length) activeClassId = classes[0].id;
+  // Do NOT auto-open a class — let the user pick
   renderClassTabs();
   renderClassContent();
   pomRender();
@@ -1175,9 +1378,12 @@ function renderClassContent() {
     return;
   }
   const cls = classes.find(c => c.id === activeClassId);
-  if (!cls) return;
-  const sections = ['notes', 'exams', 'grades', 'goals'];
-  const labels = { notes: '📝 Notes', exams: '📅 Exams', grades: '⭐ Grades', goals: '🎯 Goals' };
+  if (!cls) {
+    el.innerHTML = '<div style="text-align:center;padding:60px 20px;color:var(--tl)"><div style="font-size:48px;margin-bottom:12px">📚</div><div style="font-size:16px">Select a class above to get started.</div></div>';
+    return;
+  }
+  const sections = ['notes', 'exams', 'grades', 'goals', 'resources', 'record'];
+  const labels = { notes: '📝 Notes', exams: '📅 Exams', grades: '⭐ Grades', goals: '🎯 Goals', resources: '🔗 Resources', record: '🎙️ Record' };
   const col = cls.color || '#0d9488';
   const profInfo = [
     cls.professor ? `👤 ${escHtml(cls.professor)}` : '',
@@ -1221,10 +1427,13 @@ function renderClassSectionBody(cls) {
   else if (activeClassSection === 'exams') el.innerHTML = buildClassExams(cls);
   else if (activeClassSection === 'grades') el.innerHTML = buildClassGrades(cls);
   else if (activeClassSection === 'goals') el.innerHTML = buildClassGoals(cls);
+  else if (activeClassSection === 'resources') el.innerHTML = buildClassResources(cls);
+  else if (activeClassSection === 'record') el.innerHTML = buildClassRecord(cls);
 }
 
 function buildClassNotes(cls) {
-  const classNotes = notes.filter(n => n.class === cls.name);
+  // Match by classId first (new), fall back to name string (legacy)
+  const classNotes = notes.filter(n => n.classId === cls.id || (!n.classId && n.class === cls.name));
   const cards = classNotes.length
     ? classNotes.map(n => `
         <div class="note-card" onclick="openNote(${n.id})">
@@ -1249,7 +1458,7 @@ function buildClassExams(cls) {
         <div class="exam-row${e.done ? ' done' : ''}">
           <input type="checkbox" ${e.done ? 'checked' : ''} onchange="toggleExam(${e.id})" style="width:18px;height:18px;accent-color:var(--teal);cursor:pointer;flex-shrink:0">
           <div class="exam-title" style="flex:1;font-size:15px">${escHtml(e.title)}</div>
-          <div style="font-size:13px;color:var(--tl);white-space:nowrap">${e.date}</div>
+          <div style="font-size:13px;color:var(--teal-d);white-space:nowrap;cursor:pointer;text-decoration:underline dotted;text-underline-offset:2px" onclick="openPlannerAtDate('${e.date}')" title="Open in Planner">${e.date}</div>
           <button onclick="editExam(${e.id})" style="background:none;border:none;color:var(--tl);cursor:pointer;font-size:13px" title="Edit">✏️</button>
           <button onclick="removeExam(${e.id})" style="background:none;border:none;color:var(--tl);cursor:pointer;font-size:13px">✕</button>
         </div>`).join('')
@@ -1344,6 +1553,85 @@ function buildClassGoals(cls) {
     <div style="margin-bottom:10px;font-size:14px;color:var(--tl)">Write what you want to achieve in this class.</div>
     <textarea class="journal-ta" style="min-height:200px" placeholder="Goals, learning objectives, what you want to master..."
       onblur="saveClassGoals(${cls.id}, this.value)">${escHtml(cls.goals || '')}</textarea>`;
+}
+
+// ===== CLASS RESOURCES =====
+let classResources = S.get('classResources') || []; // [{ id, classId, label, url }]
+
+function buildClassResources(cls) {
+  const res = classResources.filter(r => r.classId === cls.id);
+  const rows = res.map(r => `
+    <div class="resource-row" id="res-${r.id}">
+      <span style="font-size:16px">🔗</span>
+      <a href="${escHtml(r.url)}" target="_blank" rel="noopener" style="font-size:14px;color:var(--teal-d);flex:1;text-decoration:none;word-break:break-all">${escHtml(r.label || r.url)}</a>
+      <button onclick="editResource(${r.id})" style="background:none;border:none;color:var(--tl);cursor:pointer;font-size:13px" title="Edit">✏️</button>
+      <button onclick="removeResource(${r.id})" style="background:none;border:none;color:var(--tl);cursor:pointer;font-size:13px" title="Remove">✕</button>
+    </div>`).join('') || '<div style="color:var(--tl);font-style:italic;font-size:14px;padding:16px 0">No resources yet. Add links to textbooks, lecture slides, YouTube videos, etc.</div>';
+
+  return `
+    <div style="display:flex;justify-content:flex-end;margin-bottom:14px">
+      <button class="btn-primary" onclick="openAddResource(${cls.id})">+ Add Resource</button>
+    </div>
+    <div id="resource-list">${rows}</div>
+    <div id="resource-inline-form" style="display:none;margin-top:12px" class="card">
+      <div class="card-body">
+        <div class="field"><label>Label</label><input class="fi" id="res-label" placeholder="e.g. Lecture slides Week 3"/></div>
+        <div class="field"><label>URL</label><input class="fi" id="res-url" placeholder="https://..."/></div>
+        <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:8px">
+          <button class="btn-secondary" onclick="closeResourceForm()">Cancel</button>
+          <button class="btn-primary" onclick="saveResource(${cls.id})">Save →</button>
+        </div>
+      </div>
+    </div>`;
+}
+
+let editingResourceId = null;
+
+function openAddResource(_classId) {
+  editingResourceId = null;
+  document.getElementById('res-label').value = '';
+  document.getElementById('res-url').value = '';
+  document.getElementById('resource-inline-form').style.display = 'block';
+  document.getElementById('res-label').focus();
+}
+
+function editResource(id) {
+  const r = classResources.find(r => r.id === id);
+  if (!r) return;
+  editingResourceId = id;
+  document.getElementById('res-label').value = r.label || '';
+  document.getElementById('res-url').value = r.url || '';
+  document.getElementById('resource-inline-form').style.display = 'block';
+  document.getElementById('res-label').focus();
+}
+
+function saveResource(classId) {
+  const label = document.getElementById('res-label').value.trim();
+  const url = document.getElementById('res-url').value.trim();
+  if (!url) return;
+  if (editingResourceId) {
+    const r = classResources.find(r => r.id === editingResourceId);
+    if (r) { r.label = label; r.url = url; }
+    editingResourceId = null;
+  } else {
+    classResources.push({ id: Date.now(), classId, label, url });
+  }
+  S.set('classResources', classResources);
+  const cls = classes.find(c => c.id === classId);
+  if (cls) renderClassSectionBody(cls);
+}
+
+function removeResource(id) {
+  classResources = classResources.filter(r => r.id !== id);
+  S.set('classResources', classResources);
+  const cls = classes.find(c => c.id === activeClassId);
+  if (cls) renderClassSectionBody(cls);
+}
+
+function closeResourceForm() {
+  const form = document.getElementById('resource-inline-form');
+  if (form) form.style.display = 'none';
+  editingResourceId = null;
 }
 
 function addClass() {
@@ -1541,12 +1829,15 @@ function pomToggle() {
   if (pom.running) {
     clearInterval(pom.int);
     pom.running = false;
+    S.set('pomState', { running: false, mode: pom.mode, total: pom.total, rem: pom.rem, ses: pom.ses, mins: pom.mins });
     document.getElementById('pom-btn').textContent = '\u25b6 Resume';
   } else {
     pom.running = true;
     document.getElementById('pom-btn').textContent = '\u23f8 Pause';
     pom.int = setInterval(() => {
       pom.rem--;
+      // Persist every tick so navigation/refresh doesn't lose progress
+      S.set('pomState', { running: pom.running, mode: pom.mode, total: pom.total, rem: pom.rem, ses: pom.ses, mins: pom.mins });
       if (pom.rem <= 0) {
         clearInterval(pom.int);
         pom.running = false;
@@ -1558,7 +1849,6 @@ function pomToggle() {
           document.getElementById('pom-mins').textContent = pom.mins + 'm';
           const dots = document.querySelectorAll('.pom-dot');
           if (dots[(pom.ses - 1) % 4]) dots[(pom.ses - 1) % 4].classList.add('done');
-          // Log session
           const today = new Date().toLocaleDateString('sv-SE');
           if (!pomLog[today]) pomLog[today] = { sessions: 0, mins: 0 };
           pomLog[today].sessions++;
@@ -1566,6 +1856,7 @@ function pomToggle() {
           S.set('pomLog', pomLog);
         }
         pom.rem = 0;
+        S.set('pomState', { running: pom.running, mode: pom.mode, total: pom.total, rem: pom.rem, ses: pom.ses, mins: pom.mins });
         document.getElementById('pom-btn').textContent = '\u25b6 Start';
         pomRender();
         return;
@@ -1617,13 +1908,13 @@ function renderNotes() {
 
   // Render class browse cards when no query
   if (!notesSearchQuery) {
-    const classesWithNotes = classes.filter(c => notes.some(n => n.class === c.name));
-    const generalNotes = notes.filter(n => !n.class || !classes.find(c => c.name === n.class));
+    const classesWithNotes = classes.filter(c => notes.some(n => n.classId === c.id || (!n.classId && n.class === c.name)));
+    const generalNotes = notes.filter(n => !n.class && !n.classId);
 
     let html = '';
     if (classesWithNotes.length) {
       html += classesWithNotes.map(c => {
-        const cnt = notes.filter(n => n.class === c.name).length;
+        const cnt = notes.filter(n => n.classId === c.id || (!n.classId && n.class === c.name)).length;
         const col = c.color || 'var(--teal)';
         return `<div class="note-class-card" onclick="nav('study');setTimeout(()=>{switchClass(${c.id})},50)">
           <div class="note-class-thumb" style="background:${col}20;border-color:${col}">${c.emoji || '📚'}</div>
@@ -1701,30 +1992,45 @@ function renderSbUpcoming() {
   if (!el) return;
   const today = new Date();
   const todayStr = today.toLocaleDateString('sv-SE');
-  const limit = new Date(today.getTime() + 7 * 86400000).toLocaleDateString('sv-SE');
 
   const items = [];
-  // Exams from all classes
+  // Today's exams
   classExams.forEach(e => {
-    if (!e.done && e.date >= todayStr && e.date <= limit) {
+    if (!e.done && e.date === todayStr) {
       const cls = classes.find(c => c.id === e.classId);
-      items.push({ date: e.date, title: e.title, sub: cls ? cls.name : 'Exam' });
+      items.push({ time: '', title: e.title, sub: cls ? cls.name : 'Exam' });
     }
   });
-  // Manual calendar events
+  // Today's manual calendar events
   calManualEvents.forEach(e => {
-    if (e.date >= todayStr && e.date <= limit) {
-      items.push({ date: e.date, title: e.title, sub: 'Event' });
+    if (e.date === todayStr) {
+      items.push({ time: e.time || '', title: e.title, sub: 'Event' });
     }
   });
-  items.sort((a, b) => a.date.localeCompare(b.date));
-  const top = items.slice(0, 3);
-  el.innerHTML = top.length
-    ? top.map(i => `<div class="sb-upcoming-item">
+  // Today's GCal events
+  gcalEvents.forEach(e => {
+    const d = new Date(e.start?.dateTime || e.start?.date);
+    if (d.toLocaleDateString('sv-SE') === todayStr) {
+      const t = e.start?.dateTime ? d.toLocaleTimeString('sv-SE',{hour:'2-digit',minute:'2-digit'}) : '';
+      items.push({ time: t, title: e.summary || 'Event', sub: 'GCal' });
+    }
+  });
+  // Today's scheduled classes
+  getTodayScheduleClasses().forEach(cls => {
+    items.push({ time: '', title: cls, sub: 'Class' });
+  });
+  items.sort((a, b) => (a.time || '').localeCompare(b.time || ''));
+
+  const label = document.getElementById('sb-upcoming-label');
+  if (label) label.textContent = "Today";
+
+  el.innerHTML = items.length
+    ? items.map(i => `<div class="sb-upcoming-item">
+        ${i.time ? `<div style="font-size:10px;color:var(--teal);font-weight:600">${i.time}</div>` : ''}
         <div class="sb-upcoming-title">${escHtml(i.title)}</div>
-        <div class="sb-upcoming-date">${i.date.slice(5)} · ${escHtml(i.sub)}</div>
+        <div class="sb-upcoming-date">${escHtml(i.sub)}</div>
       </div>`).join('')
-    : '<div style="font-size:11px;color:var(--tl);padding:4px 16px">Nothing upcoming</div>';
+    : '<div style="font-size:11px;color:var(--tl);padding:4px 16px">Nothing today</div>';
 }
 
 function openNewNote() {
@@ -1770,6 +2076,10 @@ function autoSaveNote() {
   if (!curNote) return;
   curNote.title = document.getElementById('note-title').textContent;
   curNote.class = document.getElementById('note-class').value;
+  // Also stamp classId for reliable cross-referencing when class is renamed
+  const matchedCls = classes.find(c => c.name === curNote.class);
+  if (matchedCls) curNote.classId = matchedCls.id;
+  else delete curNote.classId;
   curNote.date = document.getElementById('note-date').value;
   curNote.mood = document.getElementById('note-mood').value;
   curNote.cues = document.getElementById('note-cues').value;
@@ -1807,8 +2117,10 @@ function renderPlanner() {
   if (sml) sml.textContent = MONTHS_SV[new Date().getMonth()];
   renderCal();
   renderSchedule();
+  renderScheduleHistory();
+  renderScheduleGCal();
+  renderGCalEvents();
   renderPlannerBudgetSnap();
-  renderPinterestBoard();
 }
 
 function renderPlannerBudgetSnap() {
@@ -1844,13 +2156,15 @@ function setCalView(v) { calView = v; renderCal(); }
 function calGoToday() {
   const t = new Date();
   calY = t.getFullYear(); calM = t.getMonth();
-  calWeekOff = 0; calDayNum = null;
+  calWeekOff = 0; calDayNum = 0;
+  calView = 'day';
   renderCal();
 }
 
 function renderCalMonth() {
   const el = document.getElementById('cal-grid-main');
   if (!el) return;
+  el.className = 'cal-grid'; // apply 7-column grid layout
   document.getElementById('cal-title-main').textContent = MONTHS_SV[calM] + ' ' + calY;
   const now = new Date();
   let html = DAYS_SV.map(d => `<div class="cal-dh">${d}</div>`).join('');
@@ -1859,16 +2173,21 @@ function renderCalMonth() {
   const dim = new Date(calY, calM + 1, 0).getDate();
   for (let i = 0; i < dow; i++) html += `<div class="cal-day other-month"></div>`;
   for (let d = 1; d <= dim; d++) {
+    const dStr = `${calY}-${String(calM+1).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
     const isT = d === now.getDate() && calM === now.getMonth() && calY === now.getFullYear();
     const hasManualEv = calManualEvents.some(e => { const ed = new Date(e.date); return ed.getDate() === d && ed.getMonth() === calM && ed.getFullYear() === calY; });
     const hasEv = hasManualEv || gcalEvents.some(e => { const ed = new Date(e.start?.dateTime || e.start?.date); return ed.getDate() === d && ed.getMonth() === calM && ed.getFullYear() === calY; });
+    const hasDiary = diary.some(e => e.date === dStr);
+    const hasTasks = tasks.some(t => !t.done && t.dueDate === dStr);
     const evColors = [];
     calManualEvents.filter(e => { const ed = new Date(e.date); return ed.getDate() === d && ed.getMonth() === calM && ed.getFullYear() === calY; })
       .forEach(e => { const cls = classes.find(c => e.classId === c.id); evColors.push(cls?.color || 'var(--warm)'); });
     gcalEvents.filter(e => { const ed = new Date(e.start?.dateTime || e.start?.date); return ed.getDate() === d && ed.getMonth() === calM && ed.getFullYear() === calY; })
       .forEach(() => evColors.push('var(--teal)'));
-    const dots = evColors.slice(0, 3).map(c => `<span class="cal-dot" style="background:${c}"></span>`).join('');
-    html += `<div class="cal-day${isT ? ' today' : ''}${hasEv ? ' has-event' : ''}" onclick="openAddCalEvent(${d},${calM},${calY})">${d}${dots ? `<div class="cal-dots">${dots}</div>` : ''}</div>`;
+    if (hasTasks) evColors.push('var(--rose)');
+    if (hasDiary) evColors.push('var(--sage)');
+    const dots = evColors.slice(0, 4).map(c => `<span class="cal-dot" style="background:${c}"></span>`).join('');
+    html += `<div class="cal-day${isT ? ' today' : ''}${hasEv ? ' has-event' : ''}" onclick="selectCalDay(${d},${calM},${calY})">${d}${dots ? `<div class="cal-dots">${dots}</div>` : ''}</div>`;
   }
   el.innerHTML = html;
 
@@ -1884,14 +2203,53 @@ function renderCalMonth() {
           <button onclick="removeCalEvent(${e.id})" style="background:none;border:none;color:var(--tl);cursor:pointer;font-size:11px">✕</button>
         </div>
       </div>`
-    ).join('') : '<div style="font-size:12px;color:var(--tl);font-style:italic">Click any day to add an event</div>';
+    ).join('') : '<div style="font-size:12px;color:var(--tl);font-style:italic">Click any day to see details or add an event</div>';
   }
   renderGCalEvents();
+}
+
+function selectCalDay(d, month, year) {
+  const dStr = `${year}-${String(month+1).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
+  const evEl = document.getElementById('cal-events-list');
+  if (!evEl) { openAddCalEvent(d, month, year); return; }
+
+  const dayEvs = calManualEvents.filter(e => e.date === dStr);
+  const gcalDayEvs = gcalEvents.filter(e => { const ed = new Date(e.start?.dateTime || e.start?.date); return ed.toLocaleDateString('sv-SE') === dStr; });
+  const dayTasks = tasks.filter(t => !t.done && t.dueDate === dStr);
+  const hasDiary = diary.some(e => e.date === dStr);
+
+  const dateLabel = new Date(dStr).toLocaleDateString('sv-SE', { weekday: 'long', day: 'numeric', month: 'long' });
+
+  const evRows = [...dayEvs.map(e => `<div style="display:flex;align-items:center;gap:6px;font-size:13px;padding:3px 0">
+    <span style="color:var(--tl);min-width:44px">${e.time || 'All day'}</span>
+    <span style="flex:1">${escHtml(e.title)}</span>
+    <button onclick="editCalEvent(${e.id})" style="background:none;border:none;color:var(--tl);cursor:pointer;font-size:11px">✏️</button>
+    <button onclick="removeCalEvent(${e.id});selectCalDay(${d},${month},${year})" style="background:none;border:none;color:var(--tl);cursor:pointer;font-size:11px">✕</button>
+  </div>`),
+  ...gcalDayEvs.map(e => `<div style="font-size:13px;padding:3px 0;color:var(--teal)">🗓 ${escHtml(e.summary || 'GCal event')}</div>`)].join('') || '<div style="font-size:12px;color:var(--tl);font-style:italic;padding:3px 0">No events</div>';
+
+  const taskRows = dayTasks.map(t => `<div style="font-size:13px;padding:2px 0">✅ ${escHtml(t.title)}</div>`).join('') || '';
+
+  evEl.innerHTML = `
+    <div style="padding:10px 0 6px;border-top:1px solid var(--border);margin-top:8px">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
+        <strong style="font-size:14px;color:var(--td)">${dateLabel}</strong>
+        <button onclick="document.getElementById('cal-events-list').innerHTML=''" style="background:none;border:none;cursor:pointer;color:var(--tl);font-size:13px">✕</button>
+      </div>
+      ${evRows}
+      ${taskRows ? `<div style="margin-top:4px;padding-top:4px;border-top:1px solid var(--border)">${taskRows}</div>` : ''}
+      <div style="display:flex;gap:8px;margin-top:10px;flex-wrap:wrap">
+        <button class="btn-primary" style="font-size:12px;padding:5px 10px" onclick="openAddTaskForDate('${dStr}')">✅ Add Task</button>
+        <button class="btn-secondary" style="font-size:12px;padding:5px 10px" onclick="openJournalForDate('${dStr}')">📔 ${hasDiary ? 'Journal' : 'Write Journal'}</button>
+        <button class="btn-secondary" style="font-size:12px;padding:5px 10px" onclick="openAddCalEvent(${d},${month},${year})">＋ Event</button>
+      </div>
+    </div>`;
 }
 
 function renderCalWeek() {
   const el = document.getElementById('cal-grid-main');
   if (!el) return;
+  el.className = ''; // clear month grid class
   const today = new Date();
   let todayDow = today.getDay() === 0 ? 6 : today.getDay() - 1;
   const mon = new Date(today); mon.setDate(today.getDate() - todayDow + calWeekOff * 7);
@@ -1915,8 +2273,8 @@ function renderCalWeek() {
         const gcalSlotEvs = gcalDayEvs.filter(e => { if (!e.start?.dateTime) return false; return new Date(e.start.dateTime).getHours() === h; });
         const allDayEvs = h === 7 ? dayEvs.filter(e => !e.time) : [];
         return `<div class="cal-week-slot" onclick="openAddCalEventWithTime('${dStr}',${h})">
-          ${allDayEvs.map(e => `<div class="cal-week-ev" onclick="event.stopPropagation()">${escHtml(e.title)}<button onclick="removeCalEvent(${e.id});event.stopPropagation()" style="background:none;border:none;color:inherit;cursor:pointer;font-size:9px;margin-left:3px">✕</button></div>`).join('')}
-          ${slotEvs.map(e => `<div class="cal-week-ev" onclick="event.stopPropagation()">${escHtml(e.title)}<button onclick="removeCalEvent(${e.id});event.stopPropagation()" style="background:none;border:none;color:inherit;cursor:pointer;font-size:9px;margin-left:3px">✕</button></div>`).join('')}
+          ${allDayEvs.map(e => `<div class="cal-week-ev" onclick="event.stopPropagation()">${escHtml(e.title)}<button onclick="editCalEvent(${e.id});event.stopPropagation()" style="background:none;border:none;color:inherit;cursor:pointer;font-size:9px;margin-left:3px" title="Edit">✏️</button><button onclick="removeCalEvent(${e.id});event.stopPropagation()" style="background:none;border:none;color:inherit;cursor:pointer;font-size:9px;margin-left:2px">✕</button></div>`).join('')}
+          ${slotEvs.map(e => `<div class="cal-week-ev" onclick="event.stopPropagation()">${escHtml(e.title)}<button onclick="editCalEvent(${e.id});event.stopPropagation()" style="background:none;border:none;color:inherit;cursor:pointer;font-size:9px;margin-left:3px" title="Edit">✏️</button><button onclick="removeCalEvent(${e.id});event.stopPropagation()" style="background:none;border:none;color:inherit;cursor:pointer;font-size:9px;margin-left:2px">✕</button></div>`).join('')}
           ${gcalSlotEvs.map(e => `<div class="cal-week-ev gcal-ev">${escHtml(e.summary || 'Event')}</div>`).join('')}
         </div>`;
       }).join('')}
@@ -1932,6 +2290,7 @@ function renderCalWeek() {
 function renderCalDay() {
   const el = document.getElementById('cal-grid-main');
   if (!el) return;
+  el.className = ''; // clear month grid class
   const base = new Date(); base.setDate(base.getDate() + (calDayNum || 0));
   const dStr = base.toLocaleDateString('sv-SE');
   const dow = base.getDay() === 0 ? 6 : base.getDay() - 1;
@@ -1947,16 +2306,28 @@ function renderCalDay() {
     html += `<div class="cal-day-row" onclick="openAddCalEventWithTime('${dStr}',${h})">
       <div class="cal-day-hour">${h}:00</div>
       <div class="cal-day-slot">
-        ${allDay.map(e => `<div class="cal-week-ev" onclick="event.stopPropagation()">${escHtml(e.title)}<button onclick="removeCalEvent(${e.id});event.stopPropagation()" style="background:none;border:none;color:inherit;cursor:pointer;font-size:9px;margin-left:3px">✕</button></div>`).join('')}
-        ${slotEvs.map(e => `<div class="cal-week-ev" onclick="event.stopPropagation()">${escHtml(e.title)}<button onclick="removeCalEvent(${e.id});event.stopPropagation()" style="background:none;border:none;color:inherit;cursor:pointer;font-size:9px;margin-left:3px">✕</button></div>`).join('')}
+        ${allDay.map(e => `<div class="cal-week-ev" onclick="event.stopPropagation()">${escHtml(e.title)}<button onclick="editCalEvent(${e.id});event.stopPropagation()" style="background:none;border:none;color:inherit;cursor:pointer;font-size:9px;margin-left:3px" title="Edit">✏️</button><button onclick="removeCalEvent(${e.id});event.stopPropagation()" style="background:none;border:none;color:inherit;cursor:pointer;font-size:9px;margin-left:2px">✕</button></div>`).join('')}
+        ${slotEvs.map(e => `<div class="cal-week-ev" onclick="event.stopPropagation()">${escHtml(e.title)}<button onclick="editCalEvent(${e.id});event.stopPropagation()" style="background:none;border:none;color:inherit;cursor:pointer;font-size:9px;margin-left:3px" title="Edit">✏️</button><button onclick="removeCalEvent(${e.id});event.stopPropagation()" style="background:none;border:none;color:inherit;cursor:pointer;font-size:9px;margin-left:2px">✕</button></div>`).join('')}
         ${gcalSlotEvs.map(e => `<div class="cal-week-ev gcal-ev">${escHtml(e.summary || 'Event')}</div>`).join('')}
       </div>
     </div>`;
   });
   html += '</div>';
   el.innerHTML = html;
+
+  // Show tasks due today below the day view
+  const dayTasks = tasks.filter(t => !t.done && t.dueDate === dStr);
   const evEl = document.getElementById('cal-events-list');
-  if (evEl) evEl.innerHTML = '';
+  if (evEl) {
+    evEl.innerHTML = dayTasks.length
+      ? `<div style="margin-top:8px;padding-top:8px;border-top:1px solid var(--border)">
+          <div style="font-size:11px;font-weight:700;color:var(--tl);text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px">Tasks due today</div>
+          ${dayTasks.map(t => `<div style="font-size:13px;padding:3px 0;display:flex;align-items:center;gap:8px">
+            <span style="font-size:10px;color:var(--rose)">●</span> ${escHtml(t.title)}
+          </div>`).join('')}
+        </div>`
+      : '';
+  }
   renderGCalEvents();
 }
 
@@ -1970,6 +2341,21 @@ function openAddCalEventWithTime(dateStr, hour) {
 }
 
 // ===== CLASS SCHEDULE =====
+function schedPrev() { schedWeekIdx = Math.max(0, schedWeekIdx - 1); renderSchedule(); }
+function schedNext() { schedWeekIdx = Math.min(schedule.length - 1, schedWeekIdx + 1); renderSchedule(); }
+function schedToggleDay(btn) {
+  const pillsEl = btn.closest('.sched-h-pills');
+  if (!pillsEl) return;
+  const hidden = pillsEl.querySelectorAll('.sched-pill-hidden');
+  if (hidden.length) {
+    hidden.forEach(p => p.classList.remove('sched-pill-hidden'));
+    btn.textContent = 'Show less';
+  } else {
+    // re-collapse — just re-render
+    renderSchedule();
+  }
+}
+
 function renderSchedule() {
   const el = document.getElementById('schedule-container');
   if (!el) return;
@@ -1977,38 +2363,198 @@ function renderSchedule() {
     el.innerHTML = '<div class="card"><div class="card-body" style="color:var(--tl);font-style:italic;font-size:13px">No schedule yet. Click + Week to add one.</div></div>';
     return;
   }
-  const DAY_NAMES = ['M\u00e5n', 'Tis', 'Ons', 'Tor', 'Fre'];
-  let html = '<div class="card"><div style="padding:0"><table class="sched"><tr><th>V</th>' +
-    DAY_NAMES.map(d => `<th>${d}</th>`).join('') +
-    (schedEditMode ? '<th></th>' : '') + '</tr>';
+  schedWeekIdx = Math.max(0, Math.min(schedWeekIdx, schedule.length - 1));
+  const week = schedule[schedWeekIdx];
+  const DAY_FULL = ['M\u00e5n', 'Tis', 'Ons', 'Tor', 'Fre'];
+  const COLLAPSE_AT = 2; // show this many pills before "show more"
 
-  schedule.forEach(week => {
-    html += `<tr><td class="week-num">${escHtml(week.week)}</td>`;
-    (week.days || []).forEach((day, dayIdx) => {
-      html += `<td><span class="sched-date">${escHtml(day.date)}</span>`;
-      (day.classes || []).forEach((cls, clsIdx) => {
-        const matchedClass = classes.find(c => cls.includes(c.name));
-        const pillColor = matchedClass?.color ? `background:${matchedClass.color}20;color:${matchedClass.color};border:1px solid ${matchedClass.color}40` : '';
-        html += `<span class="class-pill" ${pillColor ? `style="${pillColor}"` : ''}><span id="scls-${week.id}-${dayIdx}-${clsIdx}" ondblclick="inlineEditSchedClass(${week.id},${dayIdx},${clsIdx})" title="Double-click to edit">${escHtml(cls)}</span>`;
-        if (schedEditMode) {
-          html += `<button onclick="inlineEditSchedClass(${week.id},${dayIdx},${clsIdx})" class="sched-pill-del" title="Edit" style="color:var(--tl)">✏️</button>`;
-          html += `<button onclick="removeScheduleClass(${week.id},${dayIdx},${clsIdx})" class="sched-pill-del" title="Remove">\u2715</button>`;
-        }
-        html += '</span>';
-      });
-      if (schedEditMode) {
-        html += `<button onclick="openAddSchedClass(${week.id},${dayIdx})" class="sched-add-cls-btn">+ class</button>`;
-      }
-      html += '</td>';
-    });
-    if (schedEditMode) {
-      html += `<td><button onclick="removeScheduleWeek(${week.id})" class="sched-del-week" title="Remove week">\u2715</button></td>`;
-    }
-    html += '</tr>';
+  const nav = `<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
+    <button class="cal-nb" onclick="schedPrev()" ${schedWeekIdx === 0 ? 'disabled style="opacity:.3"' : ''}>\u2039</button>
+    <span style="font-size:13px;font-weight:600;color:var(--td)">${escHtml(week.week)}</span>
+    <button class="cal-nb" onclick="schedNext()" ${schedWeekIdx === schedule.length - 1 ? 'disabled style="opacity:.3"' : ''}>\u203a</button>
+  </div>`;
+
+  // Horizontal day columns
+  const cols = (week.days || []).map((day, dayIdx) => {
+    const cls = day.classes || [];
+    const hidden = schedEditMode ? [] : cls.slice(COLLAPSE_AT);
+
+    const pills = cls.map((c, clsIdx) => {
+      const matchedClass = classes.find(mc => c.includes(mc.name));
+      const pillColor = matchedClass?.color ? `background:${matchedClass.color}20;color:${matchedClass.color};border:1px solid ${matchedClass.color}40` : '';
+      const isHidden = !schedEditMode && clsIdx >= COLLAPSE_AT;
+      const clickAttr = matchedClass && !schedEditMode ? `onclick="openClassInStudyHub(${matchedClass.id})" title="Open in Study Hub" style="cursor:pointer"` : `title="Double-click to edit"`;
+      return `<div class="class-pill sched-h-pill${isHidden ? ' sched-pill-hidden' : ''}" data-week="${week.id}" data-day="${dayIdx}" ${pillColor ? `style="${pillColor}"` : ''}>
+        <span id="scls-${week.id}-${dayIdx}-${clsIdx}" ondblclick="inlineEditSchedClass(${week.id},${dayIdx},${clsIdx})" ${clickAttr}>${escHtml(c)}</span>
+        ${schedEditMode ? `<button onclick="inlineEditSchedClass(${week.id},${dayIdx},${clsIdx})" class="sched-pill-del" style="color:var(--tl)" title="Edit">✏️</button><button onclick="removeScheduleClass(${week.id},${dayIdx},${clsIdx})" class="sched-pill-del" title="Remove">\u2715</button>` : ''}
+      </div>`;
+    }).join('');
+
+    const moreBtn = !schedEditMode && hidden.length
+      ? `<button class="btn-link sched-show-more" onclick="schedToggleDay(this)" style="font-size:10px;margin-top:3px">+${hidden.length} more</button>`
+      : '';
+
+    const addBtn = schedEditMode
+      ? `<button onclick="openAddSchedClass(${week.id},${dayIdx})" class="sched-add-cls-btn" style="margin-top:4px;width:100%">+ class</button>`
+      : '';
+
+    return `<div class="sched-h-day">
+      <div class="sched-h-dayname">${DAY_FULL[dayIdx]}</div>
+      <div class="sched-h-date">${escHtml(day.date)}</div>
+      <div class="sched-h-pills">${pills}${moreBtn}${addBtn}</div>
+    </div>`;
+  }).join('');
+
+  const delWeekBtn = schedEditMode
+    ? `<button onclick="removeScheduleWeek(${week.id})" class="btn-link" style="color:var(--rose);font-size:11px;margin-top:6px">✕ Remove week</button>`
+    : '';
+
+  el.innerHTML = `<div class="card"><div style="padding:8px 10px">${nav}<div class="sched-h-grid">${cols}</div>${delWeekBtn}</div></div>`;
+}
+
+function renderScheduleGCal() {
+  const el = document.getElementById('schedule-gcal');
+  if (!el) return;
+  // Get Mon–Sun of current week
+  const now = new Date();
+  const dow = (now.getDay() + 6) % 7; // 0=Mon
+  const weekStart = new Date(now); weekStart.setDate(now.getDate() - dow); weekStart.setHours(0,0,0,0);
+  const weekEnd = new Date(weekStart); weekEnd.setDate(weekStart.getDate() + 7);
+  const todayStr = now.toLocaleDateString('sv-SE');
+
+  // Manual events this week
+  const manualThisWeek = manualGcalEvents.filter(e => e.date >= weekStart.toLocaleDateString('sv-SE') && e.date <= weekEnd.toLocaleDateString('sv-SE'))
+    .sort((a,b) => a.date.localeCompare(b.date));
+
+  // GCal events this week
+  const gcalThisWeek = gcalEvents.filter(e => {
+    const d = new Date(e.start?.dateTime || e.start?.date);
+    return d >= weekStart && d < weekEnd;
+  }).sort((a,b) => (a.start?.dateTime || a.start?.date).localeCompare(b.start?.dateTime || b.start?.date));
+
+  if (!gcalToken && !manualThisWeek.length) {
+    el.innerHTML = '';
+    return;
+  }
+
+  const allEvents = [
+    ...gcalThisWeek.map(e => {
+      const d = new Date(e.start?.dateTime || e.start?.date);
+      const dateStr = d.toLocaleDateString('sv-SE');
+      const time = e.start?.dateTime ? d.toLocaleTimeString('sv-SE',{hour:'2-digit',minute:'2-digit'}) : 'All day';
+      return { dateStr, time, title: e.summary || 'Event', isGcal: true };
+    }),
+    ...manualThisWeek.map(e => ({ dateStr: e.date, time: e.time || 'All day', title: e.title, isGcal: false }))
+  ].sort((a,b) => a.dateStr.localeCompare(b.dateStr) || a.time.localeCompare(b.time));
+
+  const hasActiveWeek = schedule.length > 0;
+  const DAY_NAMES = ['Mån','Tis','Ons','Tor','Fre','Lör','Sön'];
+
+  // Build 7 day columns (Mon–Sun), group events by day
+  const byDay = {};
+  allEvents.forEach(e => {
+    if (!byDay[e.dateStr]) byDay[e.dateStr] = [];
+    byDay[e.dateStr].push(e);
   });
 
-  html += '</table></div></div>';
-  el.innerHTML = html;
+  const cols = Array.from({length: 7}, (_, i) => {
+    const d = new Date(weekStart); d.setDate(weekStart.getDate() + i);
+    const dateStr = d.toLocaleDateString('sv-SE');
+    const isToday = dateStr === todayStr;
+    const evs = byDay[dateStr] || [];
+    const dow = i;
+    const pills = evs.map(e => {
+      const copyBtn = hasActiveWeek && dow < 5
+        ? `<button onclick="copyGCalToSchedule('${dateStr}','${e.time}','${escHtml(e.title).replace(/'/g,"\\'")}',${dow},this)" style="background:none;border:1px solid var(--teal);border-radius:3px;font-size:9px;color:var(--teal);cursor:pointer;padding:0 4px;margin-top:2px;display:block" title="Copy to class schedule">+ Sched</button>` : '';
+      return `<div style="background:${e.isGcal ? 'rgba(13,148,136,.13)' : 'rgba(180,120,60,.1)'};border-radius:4px;padding:2px 5px;margin-bottom:3px;font-size:10px;color:var(--td)">
+        ${e.time !== 'All day' ? `<span style="color:var(--tl);display:block;font-size:9px">${e.time}</span>` : ''}
+        <span>${escHtml(e.title)}</span>
+        ${copyBtn}
+      </div>`;
+    }).join('') || '';
+
+    return `<div style="flex:1;min-width:0;background:${isToday ? 'rgba(13,148,136,.07)' : 'transparent'};border-radius:8px;padding:5px 4px;border:1px solid ${isToday ? 'var(--teal)' : 'var(--border)'}">
+      <div style="font-size:10px;font-weight:700;color:${isToday ? 'var(--teal)' : 'var(--tl)'};text-transform:uppercase;letter-spacing:.04em">${DAY_NAMES[i]}</div>
+      <div style="font-size:11px;color:var(--tm);margin-bottom:4px">${d.getDate()}</div>
+      ${pills || '<div style="font-size:10px;color:var(--border)">—</div>'}
+    </div>`;
+  }).join('');
+
+  if (!Object.keys(byDay).length) { el.innerHTML = ''; return; }
+
+  el.innerHTML = `<div class="section-header" style="margin-top:14px;margin-bottom:8px">This Week's Events</div>
+    <div class="card"><div style="padding:8px;display:flex;gap:4px">${cols}</div></div>`;
+}
+
+// Copy a GCal/manual event title into the current schedule week on the matching day
+function copyGCalToSchedule(dateStr, time, title, dow, btn) {
+  if (!schedule.length) return;
+  const week = schedule[schedWeekIdx];
+  if (!week || !week.days[dow]) return;
+  const label = time && time !== 'All day' ? `${time} ${title}` : title;
+  week.days[dow].classes.push(label);
+  S.set('schedule', schedule);
+  renderSchedule();
+  if (btn) { btn.textContent = '✓'; btn.disabled = true; setTimeout(() => renderScheduleGCal(), 1200); }
+}
+
+// Archive the current schedule week to history and remove it from active schedule
+function archiveScheduleWeek() {
+  if (!schedule.length) return;
+  const week = schedule[schedWeekIdx];
+  if (!confirm(`Archive "${week.week}" to history and remove from active schedule?`)) return;
+  schedHistory.unshift({ ...week, archivedAt: new Date().toLocaleDateString('sv-SE') });
+  S.set('schedHistory', schedHistory);
+  schedule.splice(schedWeekIdx, 1);
+  S.set('schedule', schedule);
+  schedWeekIdx = Math.max(0, schedWeekIdx - 1);
+  renderSchedule();
+  renderScheduleGCal();
+}
+
+// Restore an archived week back into active schedule
+function restoreScheduleWeek(idx) {
+  const week = schedHistory[idx];
+  if (!week) return;
+  schedule.push({ ...week, id: Date.now() });
+  S.set('schedule', schedule);
+  schedHistory.splice(idx, 1);
+  S.set('schedHistory', schedHistory);
+  schedWeekIdx = schedule.length - 1;
+  schedShowHistory = false;
+  renderSchedule();
+  renderScheduleHistory();
+}
+
+function deleteHistoryWeek(idx) {
+  schedHistory.splice(idx, 1);
+  S.set('schedHistory', schedHistory);
+  renderScheduleHistory();
+}
+
+function toggleScheduleHistory() {
+  schedShowHistory = !schedShowHistory;
+  renderScheduleHistory();
+}
+
+function renderScheduleHistory() {
+  let el = document.getElementById('schedule-history');
+  if (!el) return;
+  if (!schedShowHistory || !schedHistory.length) {
+    el.innerHTML = '';
+    return;
+  }
+  const rows = schedHistory.map((w, i) => `
+    <div style="display:flex;align-items:center;gap:8px;padding:5px 0;border-bottom:1px solid var(--border);font-size:12px">
+      <span style="font-weight:600;color:var(--td);min-width:36px">${escHtml(w.week)}</span>
+      <span style="color:var(--tl);flex:1">Archived ${w.archivedAt || ''}</span>
+      <button class="btn-link" onclick="restoreScheduleWeek(${i})" style="font-size:11px">Restore</button>
+      <button onclick="deleteHistoryWeek(${i})" style="background:none;border:none;color:var(--tl);cursor:pointer;font-size:11px">✕</button>
+    </div>`).join('');
+  el.innerHTML = `<div class="card" style="margin-top:8px"><div class="card-body" style="padding:8px 10px">
+    <div style="font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--tl);margin-bottom:6px">Past Weeks</div>
+    ${rows}
+  </div></div>`;
 }
 
 function inlineEditSchedClass(weekId, dayIdx, clsIdx) {
@@ -2274,7 +2820,7 @@ function startGCalAuth() {
   }
   const client = google.accounts.oauth2.initTokenClient({
     client_id: gcalClientId,
-    scope: 'https://www.googleapis.com/auth/calendar.events',
+    scope: 'https://www.googleapis.com/auth/calendar.readonly https://www.googleapis.com/auth/calendar.events',
     callback: resp => {
       if (resp.error) { console.error('GCal auth error:', resp.error); return; }
       gcalToken = resp.access_token;
@@ -2293,7 +2839,7 @@ function tryGCalSilentAuth() {
   }
   const client = google.accounts.oauth2.initTokenClient({
     client_id: gcalClientId,
-    scope: 'https://www.googleapis.com/auth/calendar.events',
+    scope: 'https://www.googleapis.com/auth/calendar.readonly https://www.googleapis.com/auth/calendar.events',
     prompt: '',
     callback: resp => {
       if (!resp.error && resp.access_token) {
@@ -2311,19 +2857,42 @@ async function fetchGCalEvents() {
   const now = new Date();
   const min = now.toISOString();
   const max = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000).toISOString();
+  const headers = { Authorization: 'Bearer ' + gcalToken };
   try {
-    const res = await fetch(`https://www.googleapis.com/calendar/v3/calendars/primary/events?timeMin=${min}&timeMax=${max}&singleEvents=true&orderBy=startTime&maxResults=20`, {
-      headers: { Authorization: 'Bearer ' + gcalToken }
-    });
-    if (res.status === 401) {
+    // 1. Get all calendars owned by this account
+    const listRes = await fetch('https://www.googleapis.com/calendar/v3/users/me/calendarList', { headers });
+    if (listRes.status === 401) {
       gcalToken = null;
       updateGCalBtnUI(false);
       renderGCalEvents();
       return;
     }
-    const data = await res.json();
-    gcalEvents = data.items || [];
+    const listData = await listRes.json();
+    const calIds = (listData.items || [])
+      .filter(c => c.accessRole === 'owner' || c.accessRole === 'writer')
+      .map(c => c.id);
+    if (!calIds.length) calIds.push('primary');
+
+    // 2. Fetch events from every calendar in parallel
+    const results = await Promise.all(calIds.map(id =>
+      fetch(`https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(id)}/events?timeMin=${min}&timeMax=${max}&singleEvents=true&orderBy=startTime&maxResults=50`, { headers })
+        .then(r => r.ok ? r.json() : { items: [] })
+        .then(d => d.items || [])
+        .catch(() => [])
+    ));
+
+    // 3. Merge, deduplicate by event id, sort by start
+    const seen = new Set();
+    gcalEvents = results.flat().filter(e => {
+      if (seen.has(e.id)) return false;
+      seen.add(e.id);
+      return true;
+    }).sort((a, b) => (a.start?.dateTime || a.start?.date || '').localeCompare(b.start?.dateTime || b.start?.date || ''));
+
     renderGCalEvents();
+    renderScheduleGCal();
+    renderSbUpcoming();
+    if (document.getElementById('view-today')?.classList.contains('active')) renderToday();
   } catch (e) { console.error('GCal fetch error', e); }
 }
 
@@ -2376,6 +2945,19 @@ function renderGCalEvents() {
   html += `<button class="btn-link" style="width:100%;margin-top:8px;text-align:center;font-size:12px" onclick="openAddManualGcalEvent()">+ Add Event</button>`;
 
   el.innerHTML = html;
+}
+
+// ===== ADD TASK FOR DATE =====
+function openAddTaskForDate(dateStr) {
+  editingTaskId = null;
+  if (document.getElementById('mt-title')) document.getElementById('mt-title').value = '';
+  if (document.getElementById('mt-due')) document.getElementById('mt-due').value = dateStr;
+  if (document.getElementById('mt-priority')) document.getElementById('mt-priority').value = 'none';
+  if (document.getElementById('mt-subtasks')) document.getElementById('mt-subtasks').value = '';
+  if (document.getElementById('mt-class')) document.getElementById('mt-class').value = '';
+  const tl = document.querySelector('#m-add-task .modal-title');
+  if (tl) tl.textContent = 'New Task';
+  openModal('m-add-task');
 }
 
 // ===== CALENDAR MANUAL EVENTS =====
@@ -2544,6 +3126,9 @@ function renderPinterestBoard() {
 function setHeaderImage(view) {
   pendingHeaderView = view;
   document.getElementById('hi-url').value = headerImages[view] || '';
+  document.getElementById('hi-pos-y').value = headerPositions[view] ?? 50;
+  const curFit = headerFit[view] || 'cover';
+  document.querySelectorAll('.hi-fit-btn').forEach(b => b.classList.toggle('active', b.dataset.fit === curFit));
   // Highlight active size
   const curSz = heroSizes[view] || 'md';
   document.querySelectorAll('.hero-size-btn').forEach(b => {
@@ -2556,9 +3141,26 @@ function saveHeaderImageFromUrl() {
   const url = document.getElementById('hi-url').value.trim();
   if (!url || !pendingHeaderView) return;
   headerImages[pendingHeaderView] = url;
+  headerPositions[pendingHeaderView] = parseInt(document.getElementById('hi-pos-y').value) || 50;
+  const activeFitBtn = document.querySelector('.hi-fit-btn.active');
+  headerFit[pendingHeaderView] = activeFitBtn?.dataset.fit || 'cover';
   S.set('headerImages', headerImages);
+  S.set('headerPositions', headerPositions);
+  S.set('headerFit', headerFit);
   applyHeaderImage(pendingHeaderView);
   closeModal('m-header-image');
+}
+
+function setHeaderFit(fit) {
+  document.querySelectorAll('.hi-fit-btn').forEach(b => b.classList.toggle('active', b.dataset.fit === fit));
+  // Live preview
+  if (pendingHeaderView && headerImages[pendingHeaderView]) {
+    const el = document.getElementById('hero-' + pendingHeaderView);
+    if (el) {
+      el.style.backgroundSize = fit;
+      el.style.backgroundPosition = fit === 'contain' ? 'center' : `center ${document.getElementById('hi-pos-y').value}%`;
+    }
+  }
 }
 
 function handleHeaderFileUpload(input) {
@@ -2574,7 +3176,9 @@ function handleHeaderFileUpload(input) {
 function removeHeaderImage() {
   if (!pendingHeaderView) return;
   delete headerImages[pendingHeaderView];
+  delete headerPositions[pendingHeaderView];
   S.set('headerImages', headerImages);
+  S.set('headerPositions', headerPositions);
   applyHeaderImage(pendingHeaderView);
   closeModal('m-header-image');
 }
@@ -2584,14 +3188,24 @@ function applyHeaderImage(view) {
   if (!el) return;
   const url = headerImages[view];
   if (url) {
+    const posY = headerPositions[view] ?? 50;
+    const fit = headerFit[view] || 'cover';
     el.style.backgroundImage = `url('${url}')`;
-    el.style.backgroundSize = 'cover';
-    el.style.backgroundPosition = 'center';
+    el.style.backgroundSize = fit;
+    el.style.backgroundPosition = fit === 'contain' ? 'center' : `center ${posY}%`;
+    el.style.backgroundRepeat = 'no-repeat';
   } else {
     el.style.backgroundImage = '';
     el.style.backgroundSize = '';
     el.style.backgroundPosition = '';
+    el.style.backgroundRepeat = '';
   }
+}
+
+function previewHeaderPos(val) {
+  if (!pendingHeaderView) return;
+  const el = document.getElementById('hero-' + pendingHeaderView);
+  if (el && headerImages[pendingHeaderView]) el.style.backgroundPosition = `center ${val}%`;
 }
 
 function applyAllHeaderImages() {
@@ -2599,101 +3213,91 @@ function applyAllHeaderImages() {
 }
 
 // ===== SCRAPBOOK =====
+function scrapDateLabel(dateStr) {
+  if (!dateStr) return 'No date';
+  try {
+    const d = new Date(dateStr);
+    return d.toLocaleDateString('sv-SE', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
+  } catch { return dateStr; }
+}
+
 function renderScrapbook() {
   const el = document.getElementById('scrapbook-grid');
   if (!el) return;
 
-  // Migrate old items that lack position data
-  let changed = false;
-  scrapbookPhotos.forEach((p, i) => {
-    if (p.x === undefined) {
-      p.x = (i % 4) * 26;
-      p.y = Math.floor(i / 4) * 220 + 10;
-      p.w = 22;
-      changed = true;
-    }
-  });
-  if (changed) S.set('scrapbookPhotos', scrapbookPhotos);
+  // Migrate: ensure all photos have a size field
+  scrapbookPhotos.forEach(p => { if (!p.size) p.size = 'md'; });
 
-  const maxBottom = scrapbookPhotos.reduce((m, p) => Math.max(m, p.y + 200), 260);
-  el.style.minHeight = Math.max(400, maxBottom + 40) + 'px';
-  el.style.position = 'relative';
+  el.style.position = '';
+  el.style.minHeight = '';
 
   if (!scrapbookPhotos.length) {
     el.innerHTML = '<div style="text-align:center;padding:60px 20px;color:var(--tl)"><div style="font-size:48px;margin-bottom:12px">🖼</div><div style="font-size:16px">No photos yet. Click "+ Add Photo" to start your scrapbook.</div></div>';
+    renderPinterestBoard();
     return;
   }
 
-  el.innerHTML = scrapbookPhotos.map(p => `
-    <div class="sc-img" data-id="${p.id}" style="left:${p.x}%;top:${p.y}px;width:${p.w}%">
-      <img src="${escHtml(p.url)}" alt="${escHtml(p.caption || '')}" onerror="this.style.opacity='.3'">
-      ${p.caption ? `<div class="sc-caption">${escHtml(p.caption)}</div>` : ''}
-      <button class="sc-delete" onclick="removeScrapPhoto(${p.id})">✕</button>
-      <div class="sc-resize" data-id="${p.id}"></div>
+  // Group by date, newest first
+  const groups = {};
+  scrapbookPhotos.forEach(p => {
+    const d = p.date || 'No date';
+    if (!groups[d]) groups[d] = [];
+    groups[d].push(p);
+  });
+  const sortedDates = Object.keys(groups).sort((a, b) => b.localeCompare(a));
+
+  el.innerHTML = sortedDates.map(date => `
+    <div class="sc-day-group">
+      <div class="sc-day-label">
+        <span class="sc-day-date-link" onclick="openJournalForDate('${date}')" title="Open journal for this day">${scrapDateLabel(date)}</span>
+        <span class="sc-day-journal-hint">📔</span>
+      </div>
+      <div class="sc-day-photos">
+        ${groups[date].map(p => `
+          <div class="sc-photo-card sc-sz-${p.size || 'md'}" data-id="${p.id}">
+            <div class="sc-photo-wrap">
+              <img src="${escHtml(p.url)}" alt="${escHtml(p.caption || '')}" onerror="this.style.opacity='.3'">
+              <div class="sc-photo-controls">
+                <div class="sc-size-btns">
+                  <button class="sc-sz-btn${p.size==='sm'?' active':''}" onclick="setScrapSize(${p.id},'sm')">S</button>
+                  <button class="sc-sz-btn${p.size==='md'?' active':''}" onclick="setScrapSize(${p.id},'md')">M</button>
+                  <button class="sc-sz-btn${p.size==='lg'?' active':''}" onclick="setScrapSize(${p.id},'lg')">L</button>
+                  <button class="sc-sz-btn${p.size==='xl'?' active':''}" onclick="setScrapSize(${p.id},'xl')">XL</button>
+                </div>
+                <div style="display:flex;gap:3px">
+                  <button class="sc-sz-btn" onclick="pinScrapPhotoAsHeader(${p.id})" title="Pin as page header">📌</button>
+                  <button class="sc-delete-btn" onclick="removeScrapPhoto(${p.id})">✕</button>
+                </div>
+              </div>
+            </div>
+            ${p.caption ? `<div class="sc-caption">${escHtml(p.caption)}</div>` : ''}
+          </div>`).join('')}
+      </div>
     </div>`).join('');
 
-  initScrapbookDrag();
+  renderPinterestBoard();
 }
 
-function initScrapbookDrag() {
-  const canvas = document.getElementById('scrapbook-grid');
-  if (!canvas) return;
-  canvas.querySelectorAll('.sc-img').forEach(imgEl => {
-    const id = Number(imgEl.dataset.id);
-
-    imgEl.addEventListener('mousedown', e => {
-      if (e.target.classList.contains('sc-delete') || e.target.classList.contains('sc-resize')) return;
-      e.preventDefault();
-      const rect = canvas.getBoundingClientRect();
-      const p = scrapbookPhotos.find(i => i.id === id);
-      if (!p) return;
-      const startX = e.clientX, startY = e.clientY, origX = p.x, origY = p.y;
-      const onMove = mv => {
-        const dx = ((mv.clientX - startX) / rect.width) * 100;
-        p.x = Math.max(0, Math.min(100 - p.w, origX + dx));
-        p.y = Math.max(0, origY + (mv.clientY - startY));
-        imgEl.style.left = p.x + '%';
-        imgEl.style.top = p.y + 'px';
-      };
-      const onUp = () => {
-        document.removeEventListener('mousemove', onMove);
-        document.removeEventListener('mouseup', onUp);
-        S.set('scrapbookPhotos', scrapbookPhotos);
-        renderScrapbook();
-      };
-      document.addEventListener('mousemove', onMove);
-      document.addEventListener('mouseup', onUp);
-    });
-
-    const resizeHandle = imgEl.querySelector('.sc-resize');
-    if (resizeHandle) {
-      resizeHandle.addEventListener('mousedown', e => {
-        e.preventDefault(); e.stopPropagation();
-        const rect = canvas.getBoundingClientRect();
-        const p = scrapbookPhotos.find(i => i.id === id);
-        if (!p) return;
-        const startX = e.clientX, origW = p.w;
-        const onMove = mv => {
-          p.w = Math.max(10, Math.min(100, origW + ((mv.clientX - startX) / rect.width) * 100));
-          imgEl.style.width = p.w + '%';
-        };
-        const onUp = () => {
-          document.removeEventListener('mousemove', onMove);
-          document.removeEventListener('mouseup', onUp);
-          S.set('scrapbookPhotos', scrapbookPhotos);
-          renderScrapbook();
-        };
-        document.addEventListener('mousemove', onMove);
-        document.addEventListener('mouseup', onUp);
-      });
-    }
-  });
+function setScrapSize(id, size) {
+  const p = scrapbookPhotos.find(ph => ph.id === id);
+  if (!p) return;
+  p.size = size;
+  S.set('scrapbookPhotos', scrapbookPhotos);
+  renderScrapbook();
 }
 
 function openAddScrapPhoto() {
   document.getElementById('sp-url').value = '';
   document.getElementById('sp-caption').value = '';
+  // date input requires YYYY-MM-DD
+  const now = new Date();
+  document.getElementById('sp-date').value = now.toISOString().slice(0, 10);
   openModal('m-scrap-photo');
+}
+
+function openPinterestInNewTab() {
+  const url = pinterestBoardUrl || 'https://www.pinterest.com';
+  window.open(url, '_blank');
 }
 
 function handleScrapFileUpload(input) {
@@ -2707,12 +3311,62 @@ function handleScrapFileUpload(input) {
 function addScrapPhoto() {
   const url = document.getElementById('sp-url').value.trim();
   const caption = document.getElementById('sp-caption').value.trim();
+  const rawDate = document.getElementById('sp-date')?.value;
+  // Normalize to sv-SE (YYYY-MM-DD) — the date input already gives that format
+  const date = rawDate || new Date().toLocaleDateString('sv-SE');
   if (!url) return;
-  const n = scrapbookPhotos.length;
-  scrapbookPhotos.unshift({ id: Date.now(), url, caption, date: new Date().toLocaleDateString('sv-SE'), x: (n % 4) * 26, y: 10, w: 22 });
+  scrapbookPhotos.unshift({ id: Date.now(), url, caption, date, size: 'md' });
   S.set('scrapbookPhotos', scrapbookPhotos);
   closeModal('m-scrap-photo');
   renderScrapbook();
+}
+
+const HEADER_VIEWS = [
+  { id: 'home', label: 'Home' }, { id: 'journal', label: 'Journal' },
+  { id: 'habits', label: 'Habits' }, { id: 'budget', label: 'Budget' },
+  { id: 'study', label: 'Study Hub' }, { id: 'notes', label: 'Notes' },
+  { id: 'planner', label: 'Planner' }, { id: 'scrapbook', label: 'Scrapbook' }
+];
+
+function pinScrapPhotoAsHeader(id) {
+  const photo = scrapbookPhotos.find(p => p.id === id);
+  if (!photo) return;
+  const existing = document.getElementById('sc-pin-overlay');
+  if (existing) existing.remove();
+
+  const overlay = document.createElement('div');
+  overlay.id = 'sc-pin-overlay';
+  overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:9999;display:flex;align-items:center;justify-content:center';
+  overlay.innerHTML = `
+    <div style="background:var(--cream);border-radius:12px;padding:24px;width:320px;box-shadow:0 8px 40px rgba(0,0,0,.3)">
+      <div style="font-size:16px;font-weight:700;color:var(--td);margin-bottom:4px">📌 Pin as Page Header</div>
+      <div style="font-size:13px;color:var(--tl);margin-bottom:16px">Choose which page to set this photo as the header:</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:16px">
+        ${HEADER_VIEWS.map(v => `<button onclick="doPinHeader('${v.id}',${id})" style="background:var(--cream);border:1px solid var(--border);border-radius:8px;padding:8px;cursor:pointer;font-size:13px;text-align:left;color:var(--td)" onmouseover="this.style.background='var(--teal)';this.style.color='white'" onmouseout="this.style.background='var(--cream)';this.style.color='var(--td)'">${v.label}</button>`).join('')}
+      </div>
+      <button onclick="document.getElementById('sc-pin-overlay').remove()" style="background:none;border:none;color:var(--tl);cursor:pointer;font-size:13px;width:100%;text-align:center">Cancel</button>
+    </div>`;
+  overlay.addEventListener('click', e => { if (e.target === overlay) overlay.remove(); });
+  document.body.appendChild(overlay);
+}
+
+function doPinHeader(view, photoId) {
+  const photo = scrapbookPhotos.find(p => p.id === photoId);
+  if (!photo) return;
+  headerImages[view] = photo.url;
+  headerPositions[view] = 50;
+  headerFit[view] = 'cover';
+  S.set('headerImages', headerImages);
+  S.set('headerPositions', headerPositions);
+  S.set('headerFit', headerFit);
+  applyHeaderImage(view);
+  document.getElementById('sc-pin-overlay')?.remove();
+  // Brief confirmation
+  const msg = document.createElement('div');
+  msg.style.cssText = 'position:fixed;bottom:24px;left:50%;transform:translateX(-50%);background:var(--teal);color:white;padding:10px 20px;border-radius:8px;font-size:14px;z-index:9999;box-shadow:0 4px 16px rgba(0,0,0,.2)';
+  msg.textContent = `✓ Pinned as ${HEADER_VIEWS.find(v=>v.id===view)?.label || view} header`;
+  document.body.appendChild(msg);
+  setTimeout(() => msg.remove(), 2500);
 }
 
 function removeScrapPhoto(id) {
@@ -2913,6 +3567,38 @@ function renderMoodChart() {
   ctx.fill();
 }
 
+// ===== MOOD TREND STRIP =====
+function renderMoodTrend() {
+  const el = document.getElementById('mood-trend-strip');
+  if (!el) return;
+
+  // Collect one mood per day from the last 30 days
+  const days = [];
+  for (let i = 29; i >= 0; i--) {
+    const d = new Date(); d.setDate(d.getDate() - i);
+    const dStr = d.toLocaleDateString('sv-SE');
+    const entries = diary.filter(e => e.date === dStr && e.mood);
+    // prefer night > morning > thought
+    const entry = entries.find(e => e.type === 'night') || entries.find(e => e.type === 'morning') || entries[0];
+    days.push({ dStr, mood: entry?.mood || null, d });
+  }
+
+  const moodBg = { '😊':'#d1fae5','😌':'#e0f2fe','😩':'#fef3c7','😴':'#ede9fe',
+                   '🥰':'#fce7f3','😤':'#fee2e2','😭':'#dbeafe','🤩':'#fef9c3' };
+
+  el.innerHTML = days.map(({ dStr, mood, d }) => {
+    const label = d.toLocaleDateString('sv-SE', { day: 'numeric', month: 'short' });
+    const bg = mood ? (moodBg[mood] || '#f3f4f6') : 'var(--border)';
+    const isToday = dStr === new Date().toLocaleDateString('sv-SE');
+    return `<div class="mood-trend-day${isToday ? ' mood-trend-today' : ''}"
+      onclick="openJournalForDate('${dStr}')"
+      title="${label}${mood ? ' · ' + mood : ' · no entry'}"
+      style="background:${bg}">
+      <span class="mood-trend-emoji">${mood || ''}</span>
+    </div>`;
+  }).join('');
+}
+
 // ===== TASKS =====
 function renderTasks() {
   const el = document.getElementById('tasks-list');
@@ -3078,9 +3764,10 @@ window.addEventListener('load', () => {
     item.addEventListener('click', () => nav(item.dataset.view));
   });
 
-  // If clientId is saved, show connected state (no auto-auth on load)
+  // Auto-reconnect Google Calendar silently on load (no user interaction required)
   if (gcalClientId) {
     updateGCalBtnUI(true);
+    tryGCalSilentAuth();
   }
 
   // Radio FAB
@@ -3128,5 +3815,478 @@ window.addEventListener('load', () => {
     S.set('mbMigrated', true);
   }
 
-  nav('home');
+  // Auto-restart Pomodoro if it was running when the page was closed/navigated away
+  if (_savedPom.running && _savedPom.rem > 0) {
+    pom.running = true;
+    pom.int = setInterval(() => {
+      pom.rem--;
+      S.set('pomState', { running: pom.running, mode: pom.mode, total: pom.total, rem: pom.rem, ses: pom.ses, mins: pom.mins });
+      if (pom.rem <= 0) {
+        clearInterval(pom.int);
+        pom.running = false;
+        pomBeep();
+        if (pom.mode === 'work') {
+          pom.ses++;
+          pom.mins += Math.floor(pom.total / 60);
+          const today = new Date().toLocaleDateString('sv-SE');
+          if (!pomLog[today]) pomLog[today] = { sessions: 0, mins: 0 };
+          pomLog[today].sessions++;
+          pomLog[today].mins += Math.floor(pom.total / 60);
+          S.set('pomLog', pomLog);
+        }
+        pom.rem = 0;
+        S.set('pomState', { running: pom.running, mode: pom.mode, total: pom.total, rem: pom.rem, ses: pom.ses, mins: pom.mins });
+        pomRender();
+      } else {
+        pomRender();
+      }
+    }, 1000);
+  }
+
+  // Restore last visited view instead of always going home
+  nav(S.get('lastView') || 'home');
 });
+
+// ===== LECTURE RECORDER =====
+let _recTranscript = '';
+let _recClassId = null;
+let _recMediaRecorder = null;
+let _recChunks = [];
+let _recTimerInterval = null;
+
+function buildClassRecord(cls) {
+  const recs = classTranscriptions
+    .filter(r => r.classId === cls.id)
+    .sort((a, b) => b.date.localeCompare(a.date));
+
+  const recList = recs.length ? recs.map(r => `
+    <div class="rec-card">
+      <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:8px;margin-bottom:10px">
+        <div style="font-weight:600;font-size:14px;color:var(--td)">${escHtml(r.date)}</div>
+        <button onclick="deleteTranscription(${r.id})" style="background:none;border:none;color:var(--tl);cursor:pointer;font-size:13px;flex-shrink:0" title="Delete">✕</button>
+      </div>
+      ${r.summary ? `<div class="rec-label">Summary</div><div class="rec-text">${escHtml(r.summary)}</div>` : ''}
+      ${r.keyPoints ? `<div class="rec-label" style="margin-top:10px">Key Points</div><div class="rec-text" style="white-space:pre-line">${escHtml(r.keyPoints)}</div>` : ''}
+      <details style="margin-top:10px">
+        <summary style="font-size:12px;color:var(--tl);cursor:pointer;user-select:none">Show full transcript</summary>
+        <div style="font-size:13px;color:var(--td);margin-top:8px;line-height:1.6;white-space:pre-wrap">${escHtml(r.transcript)}</div>
+      </details>
+    </div>`).join('')
+    : '<div style="color:var(--tl);font-style:italic;font-size:14px;padding:8px 0">No transcriptions saved yet.</div>';
+
+  const savedAai = S.get('sp_aai_key') || '';
+
+  return `
+    <div class="rec-wrap">
+      <div class="card" style="margin-bottom:20px">
+        <details style="margin-bottom:16px">
+          <summary style="font-size:13px;font-weight:600;color:var(--tl);cursor:pointer;user-select:none">🔑 AssemblyAI Key ${savedAai ? '(saved ✓)' : '(required)'}</summary>
+          <div style="margin-top:10px">
+            <input type="password" id="rec-aai-key" value="${escHtml(savedAai)}" placeholder="Paste your AssemblyAI key..."
+              style="width:100%;border:1px solid var(--border);border-radius:6px;padding:6px 10px;font-size:13px;background:var(--cream);color:var(--td);box-sizing:border-box"
+              onchange="S.set('sp_aai_key', this.value.trim())">
+          </div>
+        </details>
+        <div style="display:flex;align-items:center;gap:10px;margin-bottom:18px;flex-wrap:wrap">
+          <label style="font-size:13px;color:var(--tl);white-space:nowrap">Language:</label>
+          <select id="rec-lang-sel" style="border:1px solid var(--border);border-radius:6px;padding:4px 10px;font-size:13px;background:var(--cream);color:var(--td);cursor:pointer">
+            <option value="sv">Svenska</option>
+            <option value="en">English</option>
+          </select>
+        </div>
+        <div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:14px">
+          <label class="rec-upload-btn">
+            📎 Upload Audio File
+            <input type="file" accept="audio/*" style="display:none" onchange="recHandleFile(event, ${cls.id})">
+          </label>
+          <button id="rec-live-btn" class="rec-upload-btn" style="border-color:var(--rose);color:var(--rose)" onclick="recStartLive(${cls.id})">
+            🔊 Record Live Audio
+          </button>
+        </div>
+        <div style="font-size:12px;color:var(--tl);margin-bottom:4px">Live recording captures Zoom, YouTube, any audio playing on your computer.</div>
+        <div id="rec-status" style="font-size:13px;color:var(--tl);margin-top:10px;min-height:20px"></div>
+        <div id="rec-timer" style="display:none;font-size:22px;font-weight:700;color:var(--rose);margin:10px 0;letter-spacing:.05em">00:00</div>
+        <button id="rec-stop-btn" style="display:none;width:100%;margin-top:8px" class="btn-primary" onclick="recStopLive(${cls.id})">⬛ Stop & Transcribe</button>
+        <div id="rec-analysis-box" style="display:none;margin-top:14px;border-top:1px solid var(--border);padding-top:14px">
+          <div id="rec-analysis-content"></div>
+          <div style="display:flex;gap:8px;margin-top:14px;flex-wrap:wrap">
+            <button onclick="recSave(${cls.id})" class="btn-primary">Save Transcript</button>
+            <button onclick="recCopyAndAnalyze()" class="btn-secondary" style="background:var(--teal);color:#fff;border-color:var(--teal)">📋 Copy & Open Claude.ai</button>
+            <button onclick="recDiscard(${cls.id})" class="btn-secondary">Discard</button>
+          </div>
+          <div style="font-size:12px;color:var(--tl);margin-top:8px">Tip: Click "Copy & Open Claude.ai", then paste (Ctrl+V) to get summary and key points.</div>
+        </div>
+      </div>
+      <div class="section-header" style="margin-bottom:12px">Saved Transcriptions</div>
+      ${recList}
+    </div>`;
+}
+
+async function recHandleFile(event, classId) {
+  const file = event.target.files[0];
+  if (!file) return;
+  _recClassId = classId;
+  _recTranscript = '';
+
+  const status = document.getElementById('rec-status');
+  const analysisBox = document.getElementById('rec-analysis-box');
+  const analysisContent = document.getElementById('rec-analysis-content');
+
+  status.textContent = `Uploading "${file.name}"...`;
+  analysisBox.style.display = 'none';
+
+  try {
+    // Step 1: get AssemblyAI key
+    const aaiInput = document.getElementById('rec-aai-key');
+    let aaiKey = (aaiInput ? aaiInput.value.trim() : '') || S.get('sp_aai_key') || '';
+    if (!aaiKey) { status.textContent = 'AssemblyAI key missing — open the 🔑 API Keys section above.'; return; }
+    S.set('sp_aai_key', aaiKey);
+
+    // Step 2: upload file to AssemblyAI
+    const uploadRes = await fetch('https://api.assemblyai.com/v2/upload', {
+      method: 'POST',
+      headers: { authorization: aaiKey, 'content-type': 'application/octet-stream' },
+      body: file
+    });
+    if (!uploadRes.ok) throw new Error('Upload failed: ' + uploadRes.status);
+    const { upload_url } = await uploadRes.json();
+
+    // Step 3: request transcription
+    const langSel = document.getElementById('rec-lang-sel');
+    const lang = langSel ? langSel.value : 'sv';
+    const txRes = await fetch('https://api.assemblyai.com/v2/transcript', {
+      method: 'POST',
+      headers: { authorization: aaiKey, 'content-type': 'application/json' },
+      body: JSON.stringify({ audio_url: upload_url, language_code: lang, speech_models: ['universal-2'] })
+    });
+    if (!txRes.ok) throw new Error('Transcription request failed: ' + txRes.status);
+    const { id } = await txRes.json();
+
+    // Step 4: poll until done
+    status.textContent = 'Transcribing... this may take a minute for long files.';
+    let transcript = '';
+    while (true) {
+      await new Promise(r => setTimeout(r, 3000));
+      const pollRes = await fetch(`https://api.assemblyai.com/v2/transcript/${id}`, {
+        headers: { authorization: aaiKey }
+      });
+      const pollData = await pollRes.json();
+      if (pollData.status === 'completed') { transcript = pollData.text; break; }
+      if (pollData.status === 'error') throw new Error('Transcription error: ' + pollData.error);
+    }
+
+    _recTranscript = transcript;
+    status.textContent = 'Done — save or copy to Claude.ai for analysis.';
+    analysisBox.style.display = 'block';
+    analysisContent.innerHTML = `<div class="rec-text" style="white-space:pre-wrap;max-height:180px;overflow-y:auto">${escHtml(transcript)}</div>`;
+
+  } catch (err) {
+    status.textContent = 'Error: ' + err.message;
+  }
+}
+
+async function recStartLive(classId) {
+  _recClassId = classId;
+  _recChunks = [];
+
+  const status = document.getElementById('rec-status');
+  const timer = document.getElementById('rec-timer');
+  const stopBtn = document.getElementById('rec-stop-btn');
+  const liveBtn = document.getElementById('rec-live-btn');
+  const analysisBox = document.getElementById('rec-analysis-box');
+
+  // Show instructions overlay before Chrome dialog opens
+  const confirmed = await new Promise(resolve => {
+    const overlay = document.createElement('div');
+    overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:9999;display:flex;align-items:center;justify-content:center';
+    overlay.innerHTML = `
+      <div style="background:var(--cream);border-radius:16px;padding:28px 32px;max-width:400px;width:90%;box-shadow:0 8px 40px rgba(0,0,0,.25)">
+        <div style="font-size:18px;font-weight:700;color:var(--teal-d);margin-bottom:14px">Before the dialog opens</div>
+        <p style="font-size:14px;line-height:1.6;color:#555;margin:0 0 10px">In Chrome's share dialog:</p>
+        <ol style="font-size:14px;line-height:1.9;color:#444;margin:0 0 18px;padding-left:20px">
+          <li>Click the <strong>Entire Screen</strong> tab (not Window or Tab)</li>
+          <li>Check ✅ <strong>"Share system audio"</strong> at the bottom</li>
+          <li>Click <strong>Share</strong></li>
+        </ol>
+        <p style="font-size:12px;color:#888;margin:0 0 20px">Without "Share system audio", Zoom audio won't be captured.</p>
+        <div style="display:flex;gap:10px">
+          <button onclick="this.closest('div[style]').parentNode.__resolve(true)" style="flex:1;padding:10px;background:var(--teal);color:#fff;border:none;border-radius:8px;font-size:14px;cursor:pointer;font-weight:600">Got it — Open Dialog</button>
+          <button onclick="this.closest('div[style]').parentNode.__resolve(false)" style="flex:1;padding:10px;background:none;border:1px solid var(--border);border-radius:8px;font-size:14px;cursor:pointer;color:#666">Cancel</button>
+        </div>
+      </div>`;
+    overlay.__resolve = resolve;
+    document.body.appendChild(overlay);
+    overlay.querySelector('button:last-child').onclick = () => { document.body.removeChild(overlay); resolve(false); };
+    overlay.querySelector('button:first-child').onclick = () => { document.body.removeChild(overlay); resolve(true); };
+  });
+
+  if (!confirmed) return;
+
+  try {
+    // video:true is required by Chrome; we keep video tracks alive so audio keeps flowing
+    const stream = await navigator.mediaDevices.getDisplayMedia({
+      video: { width: 1, height: 1 },
+      audio: { echoCancellation: false, noiseSuppression: false }
+    });
+
+    if (!stream.getAudioTracks().length) {
+      stream.getTracks().forEach(t => t.stop());
+      status.innerHTML = '⚠️ No audio captured. Did you select <strong>Entire Screen</strong> and check <strong>Share system audio</strong>?';
+      return;
+    }
+
+    // Record audio only, but keep the full stream (with video) alive so Chrome doesn't cut audio
+    const audioStream = new MediaStream(stream.getAudioTracks());
+    _recMediaRecorder = new MediaRecorder(audioStream);
+    _recMediaRecorder._fullStream = stream; // keep reference for cleanup
+    _recMediaRecorder.ondataavailable = e => { if (e.data.size > 0) _recChunks.push(e.data); };
+    _recMediaRecorder.onstop = () => recProcessLive(classId);
+    _recMediaRecorder.start(1000);
+
+    // Timer
+    let secs = 0;
+    if (_recTimerInterval) clearInterval(_recTimerInterval);
+    _recTimerInterval = setInterval(() => {
+      secs++;
+      const m = String(Math.floor(secs / 60)).padStart(2, '0');
+      const s = String(secs % 60).padStart(2, '0');
+      if (timer) timer.textContent = `${m}:${s}`;
+    }, 1000);
+
+    status.textContent = 'Recording — play your video/lecture now.';
+    if (timer) timer.style.display = 'block';
+    if (stopBtn) stopBtn.style.display = 'block';
+    if (liveBtn) liveBtn.style.display = 'none';
+    if (analysisBox) analysisBox.style.display = 'none';
+
+    // Auto-stop if user closes the share dialog
+    stream.getAudioTracks()[0].onended = () => recStopLive(classId);
+
+  } catch (e) {
+    status.textContent = e.name === 'NotAllowedError' ? 'Permission denied — click Allow in the dialog.' : 'Error: ' + e.message;
+  }
+}
+
+function recStopLive(classId) {
+  if (_recTimerInterval) { clearInterval(_recTimerInterval); _recTimerInterval = null; }
+  const timer = document.getElementById('rec-timer');
+  const stopBtn = document.getElementById('rec-stop-btn');
+  const liveBtn = document.getElementById('rec-live-btn');
+  if (timer) timer.style.display = 'none';
+  if (stopBtn) stopBtn.style.display = 'none';
+  if (liveBtn) liveBtn.style.display = 'inline-flex';
+  if (_recMediaRecorder && _recMediaRecorder.state !== 'inactive') {
+    _recMediaRecorder.stop();
+    // Stop the full display stream (including video tracks) so the screen share ends
+    if (_recMediaRecorder._fullStream) _recMediaRecorder._fullStream.getTracks().forEach(t => t.stop());
+    _recMediaRecorder.stream.getTracks().forEach(t => t.stop());
+  }
+}
+
+async function recProcessLive(classId) {
+  const status = document.getElementById('rec-status');
+  const analysisBox = document.getElementById('rec-analysis-box');
+  const analysisContent = document.getElementById('rec-analysis-content');
+
+  if (!_recChunks.length) { status.textContent = 'No audio recorded.'; return; }
+
+  try {
+    const aaiInput = document.getElementById('rec-aai-key');
+    let aaiKey = (aaiInput ? aaiInput.value.trim() : '') || S.get('sp_aai_key') || '';
+    if (!aaiKey) { status.textContent = 'AssemblyAI key missing — open the 🔑 API Keys section above.'; return; }
+    S.set('sp_aai_key', aaiKey);
+
+    status.textContent = 'Uploading recording...';
+    const blob = new Blob(_recChunks, { type: 'audio/webm' });
+    const uploadRes = await fetch('https://api.assemblyai.com/v2/upload', {
+      method: 'POST',
+      headers: { authorization: aaiKey },
+      body: blob
+    });
+    if (!uploadRes.ok) throw new Error('Upload failed: ' + uploadRes.status);
+    const { upload_url } = await uploadRes.json();
+
+    const langSel = document.getElementById('rec-lang-sel');
+    const lang = langSel ? langSel.value : 'sv';
+    status.textContent = 'Transcribing...';
+    const txRes = await fetch('https://api.assemblyai.com/v2/transcript', {
+      method: 'POST',
+      headers: { authorization: aaiKey, 'content-type': 'application/json' },
+      body: JSON.stringify({ audio_url: upload_url, language_code: lang, speech_models: ['universal-2'] })
+    });
+    if (!txRes.ok) throw new Error('Request failed: ' + txRes.status);
+    const { id } = await txRes.json();
+
+    while (true) {
+      await new Promise(r => setTimeout(r, 3000));
+      const poll = await fetch(`https://api.assemblyai.com/v2/transcript/${id}`, { headers: { authorization: aaiKey } });
+      const data = await poll.json();
+      if (data.status === 'completed') { _recTranscript = data.text || ''; break; }
+      if (data.status === 'error') throw new Error(data.error);
+    }
+
+    if (!_recTranscript) { status.textContent = 'No speech detected.'; return; }
+
+    status.textContent = 'Done — save or copy to Claude.ai for analysis.';
+    analysisBox.style.display = 'block';
+    analysisContent.innerHTML = `<div class="rec-text" style="white-space:pre-wrap;max-height:180px;overflow-y:auto">${escHtml(_recTranscript)}</div>`;
+
+  } catch (err) {
+    if (status) status.textContent = 'Error: ' + err.message;
+  }
+}
+
+function recCopyAndAnalyze() {
+  if (!_recTranscript) return;
+  const langSel = document.getElementById('rec-lang-sel');
+  const lang = langSel ? langSel.value : 'sv';
+  const langName = lang === 'sv' ? 'svenska' : 'English';
+  const fullPrompt = `You are helping a university student study. Analyze this lecture transcript and provide:\n\n1. **Sammanfattning** — An academic summary in Swedish (4-6 sentences), written clearly and precisely as if for study notes.\n2. **Nyckelbegrepp** — Key concepts and terms as a bullet list in Swedish, with a brief explanation for each.\n3. **Key Points** — The most important takeaways in English as a bullet list, focused on what to remember for exams.\n\nTranscript:\n"""\n${_recTranscript}\n"""`;
+  navigator.clipboard.writeText(fullPrompt).then(() => {
+    window.open('https://claude.ai', '_blank');
+    const status = document.getElementById('rec-status');
+    if (status) status.textContent = 'Copied! Just paste (Ctrl+V) in Claude.ai and press Enter.';
+  }).catch(() => {
+    const status = document.getElementById('rec-status');
+    if (status) status.textContent = 'Could not copy — select the text above and copy manually.';
+  });
+}
+
+function recSave(classId) {
+  classTranscriptions.push({
+    id: Date.now(),
+    classId,
+    date: new Date().toLocaleDateString('sv-SE'),
+    transcript: _recTranscript,
+    summary: '',
+    keyPoints: ''
+  });
+  S.set('classTranscriptions', classTranscriptions);
+  _recTranscript = '';
+  const cls = classes.find(c => c.id === classId);
+  if (cls) renderClassSectionBody(cls);
+}
+
+function recDiscard(classId) {
+  _recTranscript = '';
+  const cls = classes.find(c => c.id === (classId || activeClassId));
+  if (cls) renderClassSectionBody(cls);
+}
+
+function deleteTranscription(id) {
+  if (!confirm('Delete this recording?')) return;
+  classTranscriptions = classTranscriptions.filter(r => r.id !== id);
+  S.set('classTranscriptions', classTranscriptions);
+  const cls = classes.find(c => c.id === activeClassId);
+  if (cls) renderClassSectionBody(cls);
+}
+
+// ===== AI STUDY PLANNER =====
+const AI_SYSTEM = `You are a warm, practical AI study planner for Sofia, a chemistry student at YH Akademin in Sweden. She studies organic chemistry (LA25 Organisk kemi) and inorganic chemistry, and does home lab practice.
+
+Help her plan studies, break down topics, suggest schedules, and prepare for exams. Be encouraging and concise. Use bullet points and headers for plans. Respond in the same language the user writes in (Swedish or English).
+
+When creating study plans:
+- Ask about which topics are covered if not stated
+- Suggest Pomodoro sessions (25 min work / 5 min break)
+- Prioritize harder topics earlier in the plan
+- Include a review session the day before the exam
+- Keep plans realistic given the available days`;
+
+let aiHistory = [];
+let aiOpen = false;
+
+function toggleAI() {
+  aiOpen = !aiOpen;
+  document.getElementById('ai-panel').classList.toggle('open', aiOpen);
+  if (aiOpen && aiHistory.length === 0) {
+    aiAddBot('Hej Sofia! 👋 Jag är din studieplanerare. Berätta när du har tentamen och vilka ämnen som ingår, så skapar vi en plan!');
+  }
+}
+
+function clearAIChat() {
+  aiHistory = [];
+  document.getElementById('ai-msgs').innerHTML = '';
+  aiAddBot('Hej Sofia! 👋 Jag är din studieplanerare. Berätta när du har tentamen och vilka ämnen som ingår, så skapar vi en plan!');
+  document.getElementById('ai-chips').style.display = '';
+}
+
+function aiAddUser(text) {
+  const el = document.createElement('div');
+  el.className = 'ai-msg-user';
+  el.textContent = text;
+  document.getElementById('ai-msgs').appendChild(el);
+  el.scrollIntoView({ behavior: 'smooth' });
+}
+
+function aiAddBot(text) {
+  const el = document.createElement('div');
+  el.className = 'ai-msg-bot';
+  el.innerHTML = text
+    .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
+    .replace(/^### (.+)$/gm, '<strong>$1</strong>')
+    .replace(/^- (.+)$/gm, '• $1')
+    .replace(/\n/g, '<br>');
+  document.getElementById('ai-msgs').appendChild(el);
+  el.scrollIntoView({ behavior: 'smooth' });
+}
+
+function aiTyping(show) {
+  const existing = document.getElementById('ai-typing-indicator');
+  if (show && !existing) {
+    const el = document.createElement('div');
+    el.className = 'ai-typing';
+    el.id = 'ai-typing-indicator';
+    el.textContent = '✨ Skriver…';
+    document.getElementById('ai-msgs').appendChild(el);
+    el.scrollIntoView({ behavior: 'smooth' });
+  } else if (!show && existing) {
+    existing.remove();
+  }
+}
+
+function aiChip(text) {
+  document.getElementById('ai-chips').style.display = 'none';
+  aiSendMessage(text);
+}
+
+function aiKeydown(e) {
+  if (e.key === 'Enter' && !e.shiftKey) {
+    e.preventDefault();
+    aiSend();
+  }
+}
+
+function aiSend() {
+  const input = document.getElementById('ai-input');
+  const text = input.value.trim();
+  if (!text) return;
+  input.value = '';
+  aiSendMessage(text);
+}
+
+async function aiSendMessage(text) {
+  document.getElementById('ai-chips').style.display = 'none';
+  aiAddUser(text);
+  aiHistory.push({ role: 'user', content: text });
+  aiTyping(true);
+  try {
+    const res = await fetch('/api/chat', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        system: AI_SYSTEM,
+        messages: aiHistory,
+        model: 'claude-haiku-4-5-20251001'
+      })
+    });
+    const data = await res.json();
+    aiTyping(false);
+    const reply = data?.content?.[0]?.text || 'Något gick fel. Försök igen.';
+    aiHistory.push({ role: 'assistant', content: reply });
+    aiAddBot(reply);
+  } catch {
+    aiTyping(false);
+    aiAddBot('⚠️ Kunde inte nå AI. Kontrollera att ANTHROPIC_API_KEY är inställd i Cloudflare Pages → Settings → Environment Variables.');
+  }
+}

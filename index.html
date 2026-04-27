@@ -63,7 +63,7 @@
       <div class="sb-item" data-view="planner"><span class="sb-icon">📅</span> Life Planner</div>
     </div>
     <div class="sb-section">
-      <div class="sb-upcoming-label">Upcoming</div>
+      <div class="sb-upcoming-label" id="sb-upcoming-label">Today</div>
       <div id="sb-upcoming"></div>
     </div>
   </div>
@@ -71,7 +71,6 @@
   <div class="sb-footer">
     <div id="sb-date"></div>
     <button class="sb-gcal-btn" id="sb-gcal-btn" onclick="toggleGCal()">📅 Google Cal</button>
-    <button class="sb-gcal-btn" id="sb-pin-btn" onclick="openPinterestFromSidebar()">📌 Pinterest</button>
     <button class="sb-gcal-btn" id="dark-mode-btn" onclick="toggleDarkMode()">🌙 Dark</button>
     <button class="sb-gcal-btn" onclick="exportData()">💾 Backup</button>
     <label class="sb-gcal-btn" style="cursor:pointer">📥 Restore <input type="file" accept=".json" style="display:none" onchange="importData(this)"></label>
@@ -103,11 +102,6 @@
       <button class="btn-secondary" onclick="toggleEditMode()">✦ Customize</button>
     </div>
     <div id="widget-grid" class="widget-grid"></div>
-    <div style="display:flex;align-items:center;justify-content:space-between;margin-top:28px;margin-bottom:8px">
-      <h3 style="margin:0;font-family:'Playfair Display',serif;font-size:18px;color:var(--td)">Mood Board</h3>
-      <button class="btn-link" onclick="openAddMoodImage()">+ Add Image</button>
-    </div>
-    <div id="dash-moodboard" class="dash-moodboard"></div>
   </div>
 </div>
 
@@ -193,9 +187,14 @@
       <div class="journal-photo-count" style="font-size:11px;color:var(--teal-d);margin-top:4px"></div>
     </div>
 
+    <!-- Mood trend strip (30 days) -->
+    <div style="margin-top:20px;margin-bottom:4px">
+      <div class="section-header" style="margin-bottom:8px">Mood · last 30 days <span style="font-size:11px;font-weight:400;color:var(--tl)">— click any day to open journal</span></div>
+      <div id="mood-trend-strip" class="mood-trend-strip"></div>
+    </div>
+
     <!-- Mood trend chart -->
-    <div id="mood-chart-wrap" style="margin-top:20px;margin-bottom:4px;display:none">
-      <div class="section-header" style="margin-bottom:8px">Mood Trend</div>
+    <div id="mood-chart-wrap" style="margin-top:16px;margin-bottom:4px;display:none">
       <div class="card" style="padding:12px 16px">
         <canvas id="mood-chart-canvas" style="width:100%;height:80px;display:block"></canvas>
         <div style="display:flex;justify-content:space-between;font-size:10px;color:var(--tl);margin-top:4px"><span>30 days ago</span><span>Today</span></div>
@@ -339,15 +338,12 @@
     <!-- Tools (collapsible) -->
     <div id="tools-inline-card" style="display:none;margin-bottom:20px">
       <div class="card">
-        <div class="card-head" style="display:flex;align-items:center">📎 Study Resources <button onclick="toggleToolsCard()" style="background:none;border:none;cursor:pointer;color:var(--tl);margin-left:auto;font-size:14px">✕</button></div>
-        <div class="study-links">
-          <a href="https://otter.ai" target="_blank" class="study-link"><span class="sl-icon">🎙️</span><div><div class="sl-name">Otter.ai</div><div class="sl-desc">Live transcription & meeting notes</div></div><span class="sl-arr">→</span></a>
-          <a href="https://notebooklm.google.com" target="_blank" class="study-link"><span class="sl-icon">📖</span><div><div class="sl-name">Notebook LM</div><div class="sl-desc">AI-powered study notes by Google</div></div><span class="sl-arr">→</span></a>
-          <a href="https://ankiweb.net" target="_blank" class="study-link"><span class="sl-icon">🃏</span><div><div class="sl-name">Anki Web</div><div class="sl-desc">Spaced repetition flashcards</div></div><span class="sl-arr">→</span></a>
-          <a href="https://claude.ai" target="_blank" class="study-link"><span class="sl-icon">🤖</span><div><div class="sl-name">Claude AI</div><div class="sl-desc">Explain concepts, review notes</div></div><span class="sl-arr">→</span></a>
-          <a href="https://itslearning.com" target="_blank" class="study-link"><span class="sl-icon">🎓</span><div><div class="sl-name">ITSLEARNING</div><div class="sl-desc">Course platform</div></div><span class="sl-arr">→</span></a>
-          <a href="https://www.khanacademy.org" target="_blank" class="study-link"><span class="sl-icon">🧪</span><div><div class="sl-name">Khan Academy</div><div class="sl-desc">Free courses</div></div><span class="sl-arr">→</span></a>
+        <div class="card-head" style="display:flex;align-items:center">
+          📎 Study Resources
+          <button onclick="openAddStudyTool()" style="background:none;border:none;cursor:pointer;color:var(--teal-d);margin-left:12px;font-size:13px;font-weight:600">+ Add</button>
+          <button onclick="toggleToolsCard()" style="background:none;border:none;cursor:pointer;color:var(--tl);margin-left:auto;font-size:14px">✕</button>
         </div>
+        <div class="study-links" id="study-tools-list"></div>
       </div>
     </div>
 
@@ -418,50 +414,24 @@
   <div class="view-content">
     <h2 class="view-title">Life Planner</h2>
     <div class="pmeta" id="planner-month-label"></div>
+    <!-- Top row: Schedule + GCal/Budget -->
     <div class="planner-layout">
-      <!-- Calendar column -->
-      <div>
-        <div class="section-header" style="margin-bottom:10px">
-          Planner
-          <div style="display:flex;gap:4px">
-            <button id="cal-view-month" class="cal-view-btn active" onclick="setCalView('month')">Month</button>
-            <button id="cal-view-week" class="cal-view-btn" onclick="setCalView('week')">Week</button>
-            <button id="cal-view-day" class="cal-view-btn" onclick="setCalView('day')">Day</button>
-          </div>
-        </div>
-        <div class="card">
-          <div class="card-body">
-            <div class="cal-nav">
-              <button class="cal-nb" onclick="calPrev()">‹</button>
-              <div class="cal-title" id="cal-title-main"></div>
-              <button class="cal-today-btn" onclick="calGoToday()" title="Jump to today">Today</button>
-              <button class="cal-nb" onclick="calNext()">›</button>
-            </div>
-            <div id="cal-grid-main"></div>
-            <div id="cal-events-list" style="margin-top:10px;font-size:12px"></div>
-          </div>
-        </div>
-        <div class="section-header" style="margin-top:16px;margin-bottom:10px">Quick Links</div>
-        <div class="card">
-          <div class="card-body" style="padding:8px 10px;display:flex;flex-direction:column;gap:2px">
-            <a href="https://itslearning.com" target="_blank" style="font-size:13px;color:var(--teal-d);padding:5px 0;display:block;text-decoration:none">🎓 ITSLEARNING</a>
-            <a href="https://mail.google.com" target="_blank" style="font-size:13px;color:var(--teal-d);padding:5px 0;display:block;text-decoration:none">📧 E-mail</a>
-            <a href="https://notebooklm.google.com" target="_blank" style="font-size:13px;color:var(--teal-d);padding:5px 0;display:block;text-decoration:none">📖 Notebook LM</a>
-          </div>
-        </div>
-      </div>
       <!-- Schedule column -->
       <div>
         <div class="section-header" style="margin-bottom:10px">
           Class Schedule · <em id="schedule-month-label"></em>
-          <div style="display:flex;gap:5px">
+          <div style="display:flex;gap:5px;flex-wrap:wrap">
             <button class="btn-link" onclick="openAddSchedWeek()">+ Week</button>
             <button class="btn-link" id="sched-edit-btn" onclick="toggleSchedEditMode()">✎ Edit</button>
+            <button class="btn-link" onclick="archiveScheduleWeek()" title="Move this week to history and start fresh" style="color:var(--tl)">Archive →</button>
+            <button class="btn-link" onclick="toggleScheduleHistory()" style="color:var(--tl)">History</button>
           </div>
         </div>
         <div id="schedule-container"></div>
+        <div id="schedule-history"></div>
+        <div id="schedule-gcal"></div>
       </div>
-      <!-- Right column -->
+      <!-- Right column: GCal + Budget + Quick Links -->
       <div>
         <div class="section-header" style="margin-bottom:10px">Google Calendar</div>
         <div class="card">
@@ -473,14 +443,36 @@
         <div class="card" id="planner-bud-snap">
           <div class="card-body" style="font-size:13px;color:var(--tl)">Loading...</div>
         </div>
-        <div class="section-header" style="margin-top:16px;margin-bottom:10px">
-          Pinterest Board
-          <button class="btn-link" onclick="openModal('m-pinterest')">⚙ Set Board</button>
-        </div>
-        <div class="card" id="pinterest-card">
-          <div class="card-body" id="pinterest-body">
-            <div class="gcal-widget-empty">No board set. Click "Set Board" to connect your Pinterest.</div>
+        <div class="section-header" style="margin-top:16px;margin-bottom:10px">Quick Links</div>
+        <div class="card">
+          <div class="card-body" style="padding:8px 10px;display:flex;flex-direction:column;gap:2px">
+            <a href="https://itslearning.com" target="_blank" style="font-size:13px;color:var(--teal-d);padding:5px 0;display:block;text-decoration:none">🎓 ITSLEARNING</a>
+            <a href="https://mail.google.com" target="_blank" style="font-size:13px;color:var(--teal-d);padding:5px 0;display:block;text-decoration:none">📧 E-mail</a>
+            <a href="https://notebooklm.google.com" target="_blank" style="font-size:13px;color:var(--teal-d);padding:5px 0;display:block;text-decoration:none">📖 Notebook LM</a>
           </div>
+        </div>
+      </div>
+    </div>
+    <!-- Calendar — full width at the bottom, month view -->
+    <div class="planner-cal-bottom">
+      <div class="section-header" style="margin-bottom:10px">
+        Planner
+        <div style="display:flex;gap:4px">
+          <button id="cal-view-month" class="cal-view-btn active" onclick="setCalView('month')">Month</button>
+          <button id="cal-view-week" class="cal-view-btn" onclick="setCalView('week')">Week</button>
+          <button id="cal-view-day" class="cal-view-btn" onclick="setCalView('day')">Day</button>
+        </div>
+      </div>
+      <div class="card">
+        <div class="card-body">
+          <div class="cal-nav">
+            <button class="cal-nb" onclick="calPrev()">‹</button>
+            <div class="cal-title" id="cal-title-main"></div>
+            <button class="cal-today-btn" onclick="calGoToday()" title="Jump to today">Today</button>
+            <button class="cal-nb" onclick="calNext()">›</button>
+          </div>
+          <div id="cal-grid-main"></div>
+          <div id="cal-events-list" style="margin-top:10px;font-size:12px"></div>
         </div>
       </div>
     </div>
@@ -519,6 +511,17 @@
       <button class="btn-primary" onclick="openAddScrapPhoto()">+ Add Photo</button>
     </div>
     <div id="scrapbook-grid" class="sc-canvas"></div>
+    <div style="margin-top:32px">
+      <div class="section-header" style="margin-bottom:10px">
+        Pinterest Board
+        <button class="btn-link" onclick="openModal('m-pinterest')">⚙ Set Board</button>
+      </div>
+      <div class="card" id="pinterest-card-scrapbook">
+        <div class="card-body" id="pinterest-body">
+          <div class="gcal-widget-empty">No board set. Click "Set Board" to connect your Pinterest.</div>
+        </div>
+      </div>
+    </div>
   </div>
 </div>
 
@@ -571,6 +574,23 @@
 </div>
 
 <!-- ===== MODALS ===== -->
+
+<!-- Add / Edit Study Tool -->
+<div class="modal-bg" id="m-study-tool">
+  <div class="modal">
+    <div class="modal-head"><div class="modal-title" id="study-tool-modal-title">Add Study Resource</div><button class="modal-close" onclick="closeModal('m-study-tool')">✕</button></div>
+    <div class="modal-body">
+      <div class="field"><label>Icon (emoji)</label><input class="fi" id="st-icon" placeholder="📖" maxlength="4"/></div>
+      <div class="field"><label>Name</label><input class="fi" id="st-name" placeholder="Notebook LM"/></div>
+      <div class="field"><label>Description</label><input class="fi" id="st-desc" placeholder="AI-powered study notes"/></div>
+      <div class="field"><label>URL</label><input class="fi" id="st-url" placeholder="https://notebooklm.google.com" type="url"/></div>
+    </div>
+    <div class="modal-foot">
+      <button class="btn-secondary" onclick="closeModal('m-study-tool')">Cancel</button>
+      <button class="btn-primary" onclick="saveStudyTool()">Save</button>
+    </div>
+  </div>
+</div>
 
 <!-- New Cornell Note -->
 <div class="modal-bg" id="m-note">
@@ -934,6 +954,22 @@
         </div>
       </div>
       <div class="field">
+        <label>Image Fit</label>
+        <div style="display:flex;gap:8px;margin-top:4px">
+          <button class="hi-fit-btn btn-secondary active" data-fit="cover" onclick="setHeaderFit('cover')" style="flex:1">Fill (crop)<br><span style="font-size:10px;color:var(--tl)">fills the banner</span></button>
+          <button class="hi-fit-btn btn-secondary" data-fit="contain" onclick="setHeaderFit('contain')" style="flex:1">Contain<br><span style="font-size:10px;color:var(--tl)">shows full image</span></button>
+        </div>
+        <div style="font-size:11px;color:var(--tl);margin-top:6px">💡 Pinterest tip: right-click a photo → "Open image in new tab" → copy that URL for full resolution</div>
+      </div>
+      <div class="field" id="hi-pos-field">
+        <label>Image Position (up / down)</label>
+        <div style="display:flex;align-items:center;gap:10px;margin-top:4px">
+          <span style="font-size:11px;color:var(--tl)">Top</span>
+          <input type="range" id="hi-pos-y" min="0" max="100" value="50" style="flex:1" oninput="previewHeaderPos(this.value)"/>
+          <span style="font-size:11px;color:var(--tl)">Bottom</span>
+        </div>
+      </div>
+      <div class="field">
         <label>Paste an image URL</label>
         <input class="fi" id="hi-url" placeholder="https://example.com/photo.jpg"/>
       </div>
@@ -967,7 +1003,13 @@
         <button class="btn-secondary" style="width:100%" onclick="document.getElementById('sp-file').click()">Choose file</button>
         <input type="file" id="sp-file" accept="image/*" style="display:none" onchange="handleScrapFileUpload(this)">
       </div>
-      <div class="field" style="margin-top:12px">
+      <div style="text-align:center;color:var(--tl);font-size:12px;padding:4px 0 10px">💡 Pinterest: open a pin → right-click image → <em>Copy image address</em> → paste above</div>
+      <button class="btn-secondary" style="width:100%;font-size:13px;margin-bottom:12px" onclick="openPinterestInNewTab()">🔗 Open my Pinterest board →</button>
+      <div class="field">
+        <label>Date</label>
+        <input class="fi" id="sp-date" type="date"/>
+      </div>
+      <div class="field">
         <label>Caption (optional)</label>
         <input class="fi" id="sp-caption" placeholder="Add a note..."/>
       </div>
@@ -980,6 +1022,26 @@
 </div>
 
 <script src="app.js"></script>
+
+<!-- ===== AI STUDY PLANNER ===== -->
+<button id="ai-fab" onclick="toggleAI()" title="AI Study Planner">✨</button>
+<div id="ai-panel">
+  <div class="ai-head">
+    <div class="ai-head-title">✨ Study Planner</div>
+    <button onclick="clearAIChat()" title="Clear chat" style="background:none;border:none;cursor:pointer;color:var(--tl);font-size:12px;padding:2px 6px">↺</button>
+    <button onclick="toggleAI()" style="background:none;border:none;cursor:pointer;color:var(--tl);font-size:16px;line-height:1">✕</button>
+  </div>
+  <div id="ai-msgs"></div>
+  <div id="ai-chips">
+    <button class="ai-chip" onclick="aiChip('Jag har en tenta, hjälp mig planera mina studier')">📅 Planera inför tenta</button>
+    <button class="ai-chip" onclick="aiChip('Gör ett studieschema för den här veckan')">🗓 Veckosschema</button>
+    <button class="ai-chip" onclick="aiChip('Vilka ämnen bör jag prioritera?')">🎯 Prioriteringar</button>
+  </div>
+  <div class="ai-input-row">
+    <textarea id="ai-input" placeholder="Skriv här..." rows="1" onkeydown="aiKeydown(event)"></textarea>
+    <button class="ai-send-btn" onclick="aiSend()">↑</button>
+  </div>
+</div>
 
 </body>
 </html>
