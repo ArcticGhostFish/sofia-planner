@@ -2338,14 +2338,15 @@ function renderPlanner() {
 function renderPlannerBudgetSnap() {
   const el = document.getElementById('planner-bud-snap');
   if (!el) return;
-  let inc = 0, exp = 0, sav = 0;
-  budget.forEach(b => { if (b.dir === 'income') inc += b.amount; else if (b.dir === 'expense') exp += b.amount; else sav += b.amount; });
-  const bal = inc - exp - sav;
+  const _td = new Date().getDate();
+  let _proj = openingBalance || 0;
+  budget.filter(b => !b.day || b.day >= _td).forEach(b => {
+    if (b.dir === 'income') _proj += b.amount; else _proj -= b.amount;
+  });
   el.innerHTML = `<div class="card-body" style="font-size:13px">
-    <div style="display:flex;justify-content:space-between;margin-bottom:6px"><span style="color:var(--tl)">Inkomst</span><span class="income-color">+${fmtKr(inc)}</span></div>
-    <div style="display:flex;justify-content:space-between;margin-bottom:6px"><span style="color:var(--tl)">Utgifter</span><span class="expense-color">-${fmtKr(exp + sav)}</span></div>
-    <div style="display:flex;justify-content:space-between;padding-top:6px;border-top:1px solid var(--border)"><span><strong>Balans</strong></span><span class="balance-color" style="font-weight:700">${fmtKr(bal)}</span></div>
-    <button class="btn-link" style="margin-top:10px;width:100%;text-align:center" onclick="nav('budget')">View full budget \u2192</button>
+    <div style="display:flex;justify-content:space-between;margin-bottom:6px"><span style="color:var(--tl)">Nu p\u00e5 kontot</span><span style="font-weight:600">${fmtKr(openingBalance || 0)}</span></div>
+    <div style="display:flex;justify-content:space-between;padding-top:6px;border-top:1px solid var(--border)"><span><strong>M\u00e5nadsslut</strong></span><span style="font-weight:700;color:${_proj < 0 ? 'var(--rose)' : 'var(--teal-d)'}">${fmtKr(_proj)}</span></div>
+    <button class="btn-link" style="margin-top:10px;width:100%;text-align:center" onclick="nav('budget')">Visa budget \u2192</button>
   </div>`;
 }
 
