@@ -1335,7 +1335,9 @@ function renderLifestyleBudget() {
   for (let i = 3; i >= 1; i--) {
     const d = new Date(now.getFullYear(), now.getMonth()-i, 1);
     const mk = d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0');
-    const spent = lifestyleEntries.filter(e => e.month===mk).reduce((s,e)=>s+e.amount,0);
+    const monthEntries = lifestyleEntries.filter(e => e.month===mk);
+    if (!monthEntries.length) { carryover = 0; continue; } // no data = no carryover
+    const spent = monthEntries.reduce((s,e)=>s+e.amount,0);
     carryover = Math.max(0, MONTHLY + carryover - spent);
   }
 
