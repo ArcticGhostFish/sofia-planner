@@ -434,14 +434,17 @@ function buildWidget(id) {
     }
 
     case 'budget-mini': {
-      let inc = 0, exp = 0, sav = 0;
-      budget.forEach(b => { if (b.dir === 'income') inc += b.amount; else if (b.dir === 'expense') exp += b.amount; else sav += b.amount; });
-      const bal = inc - exp - sav;
-      w.innerHTML = `${handle}${sizeBtns}<div class="card-head">\ud83d\udcb0 Budget \u00b7 ${MONTHS_SV[new Date().getMonth()]} ${new Date().getFullYear()}</div><div class="widget-body">
-        <div style="display:flex;justify-content:space-between;margin-bottom:6px;font-size:13px"><span style="color:var(--tl)">Inkomst</span><span class="income-color">+${fmtKr(inc)}</span></div>
-        <div style="display:flex;justify-content:space-between;margin-bottom:6px;font-size:13px"><span style="color:var(--tl)">Utgifter</span><span class="expense-color">-${fmtKr(exp + sav)}</span></div>
-        <div style="display:flex;justify-content:space-between;padding-top:6px;border-top:1px solid var(--border);font-size:14px"><span><strong>Balans</strong></span><span class="balance-color" style="font-weight:700">${fmtKr(bal)}</span></div>
-        <button class="btn-link" style="margin-top:10px;width:100%;text-align:center" onclick="nav('budget')">View full budget \u2192</button>
+      const _now = new Date();
+      const _todayD = _now.getDate();
+      let _proj = openingBalance || 0;
+      budget.filter(b => !b.day || b.day >= _todayD).forEach(b => {
+        if (b.dir === 'income') _proj += b.amount; else _proj -= b.amount;
+      });
+      const _cur = openingBalance || 0;
+      w.innerHTML = `${handle}${sizeBtns}<div class="card-head">Budget \u00b7 ${MONTHS_SV[_now.getMonth()]} ${_now.getFullYear()}</div><div class="widget-body">
+        <div style="display:flex;justify-content:space-between;margin-bottom:6px;font-size:13px"><span style="color:var(--tl)">Nu p\u00e5 kontot</span><span style="font-weight:600">${fmtKr(_cur)}</span></div>
+        <div style="display:flex;justify-content:space-between;padding-top:6px;border-top:1px solid var(--border);font-size:14px"><span><strong>M\u00e5nadsslut</strong></span><span style="font-weight:700;color:${_proj < 0 ? 'var(--rose)' : 'var(--teal-d)'}">${fmtKr(_proj)}</span></div>
+        <button class="btn-link" style="margin-top:10px;width:100%;text-align:center" onclick="nav('budget')">Visa budget \u2192</button>
       </div>`;
       break;
     }
@@ -2591,17 +2594,23 @@ function renderSchedule() {
   const el = document.getElementById('schedule-container');
   if (!el) return;
 
-  // Auto-create current week if schedule is empty
-  if (!schedule.length) { autoCreateWeek(new Date()); }
-
-  // Auto-advance: if latest week ended before this week's Monday, create new week
+  // Work out which Monday to use: if Sat/Sun use NEXT Monday, else use this week's Monday
   const now = new Date();
-  const dow = (now.getDay() + 6) % 7;
-  const thisMonday = new Date(now); thisMonday.setDate(now.getDate() - dow); thisMonday.setHours(0,0,0,0);
+  const _d = now.getDay(); // 0=Sun,6=Sat
+  const nextMon = new Date(now);
+  if (_d === 0) nextMon.setDate(now.getDate() + 1);       // Sunday → Monday
+  else if (_d === 6) nextMon.setDate(now.getDate() + 2);  // Saturday → Monday
+  else nextMon.setDate(now.getDate() - (_d - 1));          // Mon-Fri → this Monday
+
+  // Auto-create if schedule is empty
+  if (!schedule.length) { autoCreateWeek(nextMon); }
+
+  // Auto-advance: if latest week's Friday is before today, create next week
   const latest = schedule[schedule.length - 1];
-  const latestFri = latest?.days?.[4]?.date;
-  if (latestFri && new Date(latestFri) < thisMonday) {
-    autoCreateWeek(now);
+  const latestFriStr = latest?.days?.[4]?.date;
+  const todayStr2 = now.toLocaleDateString('sv-SE');
+  if (latestFriStr && latestFriStr < todayStr2) {
+    autoCreateWeek(nextMon);
     schedWeekIdx = schedule.length - 1;
   }
   schedWeekIdx = Math.max(0, Math.min(schedWeekIdx, schedule.length - 1));
