@@ -2565,12 +2565,44 @@ function schedToggleDay(btn) {
   }
 }
 
+function getISOWeek(d) {
+  const date = new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()));
+  date.setUTCDate(date.getUTCDate() + 4 - (date.getUTCDay() || 7));
+  const yearStart = new Date(Date.UTC(date.getUTCFullYear(), 0, 1));
+  return Math.ceil((((date - yearStart) / 86400000) + 1) / 7);
+}
+
+function autoCreateWeek(date) {
+  const dow = (date.getDay() + 6) % 7; // 0=Mon
+  const mon = new Date(date); mon.setDate(date.getDate() - dow);
+  const dates = Array.from({length:5}, (_, i) => {
+    const d = new Date(mon); d.setDate(mon.getDate() + i);
+    return d.toLocaleDateString('sv-SE');
+  });
+  const weekNum = getISOWeek(date);
+  const label = `V${weekNum} · ${dates[0].slice(5)} – ${dates[4].slice(5)}`;
+  const newWeek = { id: Date.now(), week: label, days: dates.map(date => ({ date, classes: [] })) };
+  schedule.push(newWeek);
+  S.set('schedule', schedule);
+  return newWeek;
+}
+
 function renderSchedule() {
   const el = document.getElementById('schedule-container');
   if (!el) return;
-  if (!schedule.length) {
-    el.innerHTML = '<div class="card"><div class="card-body" style="color:var(--tl);font-style:italic;font-size:13px">No schedule yet. Click + Week to add one.</div></div>';
-    return;
+
+  // Auto-create current week if schedule is empty
+  if (!schedule.length) { autoCreateWeek(new Date()); }
+
+  // Auto-advance: if latest week ended before this week's Monday, create new week
+  const now = new Date();
+  const dow = (now.getDay() + 6) % 7;
+  const thisMonday = new Date(now); thisMonday.setDate(now.getDate() - dow); thisMonday.setHours(0,0,0,0);
+  const latest = schedule[schedule.length - 1];
+  const latestFri = latest?.days?.[4]?.date;
+  if (latestFri && new Date(latestFri) < thisMonday) {
+    autoCreateWeek(now);
+    schedWeekIdx = schedule.length - 1;
   }
   schedWeekIdx = Math.max(0, Math.min(schedWeekIdx, schedule.length - 1));
   const week = schedule[schedWeekIdx];
