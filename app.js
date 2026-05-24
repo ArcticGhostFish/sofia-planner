@@ -11,7 +11,21 @@ let notes    = S.get('notes')   || [];
 let diary    = S.get('diary')   || [{ id: 1, title: 'Wednesday feeling', date: '2026-03-04', mood: '😌', type: 'night', content: 'Today I focused on biochemistry and got through the chapter on metabolic pathways. The weather is grey but cozy outside.', grateful: 'My warm tea and a quiet morning' }];
 let habits   = S.get('habits')  || [{ id: 1, name: 'Drink Water', emoji: '🫗' }, { id: 2, name: 'Skincare (Morning)', emoji: '🧴' }, { id: 3, name: 'Brush Teeth', emoji: '🪥' }, { id: 4, name: 'Workout', emoji: '🏋️' }, { id: 5, name: '10.000 Steps', emoji: '🚶' }, { id: 6, name: 'Study (1 hour)', emoji: '📖' }, { id: 7, name: 'Skincare (Night)', emoji: '🌙' }, { id: 8, name: 'Read', emoji: '📚' }];
 let hChecks  = S.get('hChecks') || {};
-let budget   = S.get('budget')  || [{ id: 1, name: 'Lön', amount: 13804, dir: 'income', cat: 'Bas Inkomst' }, { id: 2, name: 'GYM', amount: 500, dir: 'expense', cat: 'Prenumeration' }, { id: 3, name: 'HBO', amount: 89, dir: 'expense', cat: 'Prenumeration' }, { id: 4, name: 'Claude', amount: 244.37, dir: 'expense', cat: 'Prenumeration' }, { id: 5, name: 'Notion', amount: 324, dir: 'expense', cat: 'Prenumeration' }, { id: 6, name: 'Opti Sparande', amount: 1115, dir: 'saving', cat: 'Sparande' }, { id: 7, name: 'Hus sparande', amount: 5000, dir: 'saving', cat: 'Sparande' }, { id: 8, name: 'Storytel', amount: 99, dir: 'expense', cat: 'Prenumeration' }, { id: 9, name: 'Sparande (extra)', amount: 300, dir: 'saving', cat: 'Sparande' }];
+const BUDGET_DEFAULTS = [
+  {id:1, name:'Studiestöd',    amount:13804,  dir:'income',  cat:'Inkomst',       day:24},
+  {id:2, name:'Barnbidrag',    amount:1250,   dir:'income',  cat:'Inkomst',       day:20},
+  {id:3, name:'Adobe',         amount:231,    dir:'expense', cat:'Prenumeration', day:10},
+  {id:4, name:'Online träning',amount:550,    dir:'expense', cat:'Träning',       day:11, isEur:true},
+  {id:5, name:'HBO Max',       amount:89,     dir:'expense', cat:'Prenumeration', day:17},
+  {id:6, name:'Claude Pro',    amount:252.70, dir:'expense', cat:'Prenumeration', day:18},
+  {id:7, name:'Storytell',     amount:139,    dir:'expense', cat:'Prenumeration', day:30},
+  {id:8, name:'ISK',           amount:300,    dir:'saving',  cat:'Sparande',      day:28},
+  {id:9, name:'Opti',          amount:300,    dir:'saving',  cat:'Sparande',      day:30},
+];
+const _rawBudget = S.get('budget');
+let budget = (_rawBudget && _rawBudget.length && _rawBudget[0]?.day !== undefined)
+  ? _rawBudget : JSON.parse(JSON.stringify(BUDGET_DEFAULTS));
+if (!(_rawBudget && _rawBudget.length && _rawBudget[0]?.day !== undefined)) S.set('budget', budget);
 // photos (legacy) removed — all photos now in scrapbookPhotos
 
 // Class Schedule – stored in localStorage, editable via UI
@@ -135,6 +149,17 @@ let editingClassId = null;
 // Profile
 let profileName = S.get('profileName') || 'Sofia Merdovic';
 let profileSub  = S.get('profileSub')  || 'Life Planner';
+
+// Savings accounts (ISK, Opti, Fonder, Villahandpenning)
+let savingsAccounts = S.get('savingsAccounts') || [
+  {id:1, name:'ISK',              balance:0,     monthly:300, locked:false},
+  {id:2, name:'Opti',             balance:0,     monthly:300, locked:false},
+  {id:3, name:'Fonder',           balance:5086,  monthly:0,   locked:false},
+  {id:4, name:'Villahandpenning', balance:35000, monthly:0,   locked:true},
+];
+// Lifestyle budget: 3 000 kr/month rolling (clothes, hair, makeup)
+let lifestyleEntries = S.get('lifestyleEntries') || [];
+let openingBalance   = S.get('openingBalance')   || 0;
 
 // Edit-in-place flags
 let editingBudgetId  = null;
@@ -1148,47 +1173,211 @@ function deleteHabit(id) {
 
 // ===== BUDGET =====
 function renderBudget() {
-  const bml = document.getElementById('budget-month-label');
-  if (bml) bml.textContent = MONTHS_SV[new Date().getMonth()] + ' ' + new Date().getFullYear();
-  let inc = 0, exp = 0, sav = 0;
-  budget.forEach(b => { if (b.dir === 'income') inc += b.amount; else if (b.dir === 'expense') exp += b.amount; else sav += b.amount; });
-  const bal = inc - exp - sav;
-  document.getElementById('bi-total').textContent = '+' + fmtKr(inc);
-  document.getElementById('be-total').textContent = '-' + fmtKr(exp + sav);
-  document.getElementById('bb-total').textContent = fmtKr(bal);
+  const now = new Date();
+  const m = now.getMonth(), y = now.getFullYear();
+  const isJuly = m === 6, isJune = m === 5;
+  const MONTH_NAMES = ['Januari','Februari','Mars','April','Maj','Juni','Juli','Augusti','September','Oktober','November','December'];
 
-  const dirMap = { income: ['tag-income', 'Inkomst'], expense: ['tag-expense', 'Utgift'], saving: ['tag-saving', 'Sparande'] };
-  document.getElementById('bud-tbody').innerHTML = budget.map(b => {
-    const net = b.dir === 'income' ? b.amount : -b.amount;
-    const [cls, lbl] = dirMap[b.dir];
-    return `<tr>
-      <td>${escHtml(b.name)}</td>
-      <td>${fmtKr(b.amount)}</td>
-      <td><span class="tag ${cls}">${lbl}</span></td>
-      <td><span class="tag tag-cat">${escHtml(b.cat)}</span></td>
-      <td class="${net > 0 ? 'amount-pos' : 'amount-neg'}">${net > 0 ? '+' : ''}${fmtKr(net)}</td>
-      <td style="display:flex;gap:4px;align-items:center">
-        <button onclick="editBudget(${b.id})" style="background:none;border:none;color:var(--tl);cursor:pointer;font-size:12px" title="Edit">✏️</button>
-        <button onclick="deleteBudget(${b.id})" style="background:none;border:none;color:var(--tl);cursor:pointer;font-size:12px">\u2715</button>
-      </td>
-    </tr>`;
+  const bml = document.getElementById('budget-month-label');
+  if (bml) bml.textContent = MONTH_NAMES[m] + ' ' + y;
+
+  const oi = document.getElementById('bud-opening-input');
+  if (oi && !oi._init) { oi.value = openingBalance || ''; oi._init = true; }
+
+  const items = budget.map(b => {
+    if (b.name === 'Studiestod' || b.name === 'Studiestöd') {
+      if (isJuly) return {...b, amount:0, note:'Ingen utbetalning juli'};
+      if (isJune) return {...b, amount:3469, note:'Halv termin'};
+    }
+    return b;
+  });
+
+  let inc = 0, exp = 0, sav = 0;
+  items.forEach(b => {
+    if (b.dir === 'income') inc += b.amount;
+    else if (b.dir === 'expense') exp += b.amount;
+    else sav += b.amount;
+  });
+
+  const biEl = document.getElementById('bi-total');
+  const bbEl = document.getElementById('bb-total');
+  const bsEl = document.getElementById('bs-total');
+  const beEl = document.getElementById('be-total');
+  if (biEl) biEl.textContent = '+' + fmtKr(inc);
+  if (bbEl) bbEl.textContent = fmtKr(inc - exp);
+  if (bsEl) bsEl.textContent = fmtKr(sav);
+  if (beEl) beEl.textContent = '-' + fmtKr(exp);
+
+  const sorted = [...items].sort((a, b) => (a.day || 31) - (b.day || 31));
+  let runBal = openingBalance || 0;
+  let hasSav = false;
+
+  const rows = sorted.map(b => {
+    const isInc = b.dir === 'income', isSav = b.dir === 'saving';
+    if (isSav) hasSav = true;
+    if (isInc) runBal += b.amount; else runBal -= b.amount;
+
+    const dayStr = b.day ? b.day + ':e' : '---';
+    const nameStr = isSav
+      ? '<span class="bud-sav-arrow-inline">&#x2192;</span> ' + escHtml(b.name)
+      : escHtml(b.name);
+    const noteStr = b.note ? ' <span class="bud-note">' + escHtml(b.note) + '</span>' : '';
+
+    let inCell = '---', outCell = '---';
+    if (isInc) {
+      inCell = '<span class="bud-in-amt">+' + fmtKr(b.amount) + '</span>';
+    } else if (b.amount === 0) {
+      outCell = '<span class="bud-zero">---</span>';
+    } else if (b.isEur) {
+      outCell = '<span class="bud-out-amt">' + fmtKr(b.amount) + '</span><span class="bud-eur-badge" title="Kolla EUR/SEK den ' + (b.day||'') + ':e"> EUR ⚠</span>';
+    } else {
+      outCell = '<span class="bud-out-amt">' + fmtKr(b.amount) + (isSav ? ' *' : '') + '</span>';
+    }
+
+    const rowCls = isInc ? 'bud-row-income' : isSav ? 'bud-row-saving' : (b.amount===0 ? 'bud-row-zero' : 'bud-row-expense');
+    const balCls = runBal < 0 ? 'bud-bal-neg' : '';
+
+    return '<tr class="' + rowCls + '">' +
+      '<td class="bud-col-day">' + dayStr + '</td>' +
+      '<td class="bud-col-name">' + nameStr + noteStr + '</td>' +
+      '<td class="bud-col-in">' + inCell + '</td>' +
+      '<td class="bud-col-out">' + outCell + '</td>' +
+      '<td class="bud-col-bal ' + balCls + '">' + fmtKr(runBal) + '</td>' +
+      '<td class="bud-col-act">' +
+        '<button class="bud-act-btn" onclick="editBudget(' + b.id + ')">Edit</button>' +
+        '<button class="bud-act-btn bud-act-del" onclick="deleteBudget(' + b.id + ')">x</button>' +
+      '</td></tr>';
   }).join('');
+
+  const tfootHtml = '<tr class="bud-tfoot-row">' +
+    '<td colspan="2">Disponibelt kvar</td><td></td><td></td>' +
+    '<td class="bud-col-bal" style="font-size:15px;font-weight:700;color:var(--teal-d)">' + fmtKr(runBal) + '</td>' +
+    '<td></td></tr>';
+
+  const tbody = document.getElementById('bud-timeline');
+  const tfoot = document.getElementById('bud-tfoot');
+  if (tbody) tbody.innerHTML = rows;
+  if (tfoot) tfoot.innerHTML = tfootHtml;
+
+  const noteEl = document.getElementById('bud-saving-note');
+  if (noteEl) noteEl.style.display = hasSav ? '' : 'none';
+
+  renderSavingsPanel();
+  renderLifestyleBudget();
+}
+
+function renderSavingsPanel() {
+  const el = document.getElementById('bud-savings-panel');
+  if (!el) return;
+  const rows = savingsAccounts.map(acc => {
+    if (acc.locked) {
+      return '<div class="bud-sav-row bud-sav-locked">' +
+        '<div><div class="bud-sav-name">' + escHtml(acc.name) + '</div>' +
+        '<div class="bud-sav-tag">Reserverat — rör ej</div></div>' +
+        '<div class="bud-sav-right">' + fmtKr(acc.balance) + '</div>' +
+        '</div>';
+    }
+    const projBal = acc.balance + acc.monthly;
+    const flowHtml = acc.monthly > 0
+      ? '<div class="bud-sav-flow">' +
+          '<input type="number" class="bud-sav-input" value="' + (acc.balance||'') + '" placeholder="0" onchange="updateSavingsBalance(' + acc.id + ',this.value)" title="Nuvarande saldo">' +
+          '<span class="bud-sav-sep">&#x2192;</span>' +
+          '<span class="bud-sav-proj">' + fmtKr(projBal) + '</span>' +
+          '<span class="bud-sav-delta">+' + fmtKr(acc.monthly) + '/mån</span>' +
+        '</div>'
+      : '<div class="bud-sav-flow">' +
+          '<input type="number" class="bud-sav-input" value="' + (acc.balance||'') + '" placeholder="0" onchange="updateSavingsBalance(' + acc.id + ',this.value)" title="Nuvarande saldo">' +
+        '</div>';
+    return '<div class="bud-sav-row"><div class="bud-sav-name">' + escHtml(acc.name) + '</div>' + flowHtml + '</div>';
+  }).join('');
+
+  const total = savingsAccounts.filter(a => !a.locked).reduce((s, a) => s + a.balance, 0);
+  el.innerHTML = '<div style="padding:0">' + rows +
+    '<div class="bud-sav-total"><span>Totalt sparande (exkl. villa)</span>' +
+    '<span style="font-weight:700;color:var(--teal-d)">' + fmtKr(total) + '</span></div></div>';
+}
+
+function updateSavingsBalance(id, val) {
+  const acc = savingsAccounts.find(a => a.id === id);
+  if (acc) { acc.balance = parseFloat(val) || 0; S.set('savingsAccounts', savingsAccounts); renderSavingsPanel(); }
+}
+
+function renderLifestyleBudget() {
+  const el = document.getElementById('bud-lifestyle-panel');
+  if (!el) return;
+  const MONTHLY = 3000;
+  const now = new Date();
+  const curMK = now.getFullYear() + '-' + String(now.getMonth()+1).padStart(2,'0');
+
+  let carryover = 0;
+  for (let i = 3; i >= 1; i--) {
+    const d = new Date(now.getFullYear(), now.getMonth()-i, 1);
+    const mk = d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0');
+    const spent = lifestyleEntries.filter(e => e.month===mk).reduce((s,e)=>s+e.amount,0);
+    carryover = Math.max(0, MONTHLY + carryover - spent);
+  }
+
+  const curSpent = lifestyleEntries.filter(e=>e.month===curMK).reduce((s,e)=>s+e.amount,0);
+  const available = MONTHLY + carryover;
+  const remaining = Math.max(0, available - curSpent);
+  const pct = Math.min(100, available > 0 ? Math.round(curSpent/available*100) : 0);
+  const barColor = pct > 90 ? 'var(--rose)' : pct > 70 ? 'var(--warm)' : 'var(--teal)';
+
+  const entries = lifestyleEntries.filter(e=>e.month===curMK).sort((a,b)=>b.id-a.id);
+  const entriesHtml = entries.length
+    ? entries.map(e => '<div class="bud-lifestyle-entry">' +
+        '<span>' + escHtml(e.name) + '</span>' +
+        '<span class="bud-out-amt">-' + fmtKr(e.amount) + '</span>' +
+        '<button class="bud-act-btn bud-act-del" onclick="removeLifestyleExpense(' + e.id + ')">x</button>' +
+        '</div>').join('')
+    : '<div style="font-size:13px;color:var(--tl);padding:2px 0">Inga köp registrerade</div>';
+
+  el.innerHTML = '<div style="padding:12px 16px">' +
+    '<div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:8px">' +
+      '<span style="font-size:12px;color:var(--tl)">3 000 kr/mån' + (carryover>0 ? ' + ' + fmtKr(carryover) + ' överfört' : '') + '</span>' +
+      '<span style="font-size:18px;font-weight:700;color:var(--teal-d)">' + fmtKr(remaining) + ' kvar</span>' +
+    '</div>' +
+    '<div class="bud-lifestyle-bar"><div class="bud-lifestyle-fill" style="width:' + pct + '%;background:' + barColor + '"></div></div>' +
+    '<div style="display:flex;justify-content:space-between;font-size:11px;color:var(--tl);margin-bottom:12px">' +
+      '<span>Använt: ' + fmtKr(curSpent) + '</span><span>Tillgängligt: ' + fmtKr(available) + '</span>' +
+    '</div>' +
+    '<div style="display:flex;flex-direction:column;gap:4px">' + entriesHtml + '</div>' +
+    '</div>';
+}
+
+function addLifestyleExpense() {
+  const name = document.getElementById('ml-name').value.trim();
+  const amount = parseFloat(document.getElementById('ml-amount').value) || 0;
+  if (!name || !amount) return;
+  const now = new Date();
+  const mk = now.getFullYear() + '-' + String(now.getMonth()+1).padStart(2,'0');
+  lifestyleEntries.push({id:Date.now(), name, amount, month:mk});
+  S.set('lifestyleEntries', lifestyleEntries);
+  closeModal('m-lifestyle');
+  renderLifestyleBudget();
+}
+
+function removeLifestyleExpense(id) {
+  lifestyleEntries = lifestyleEntries.filter(e=>e.id!==id);
+  S.set('lifestyleEntries', lifestyleEntries);
+  renderLifestyleBudget();
 }
 
 function addBudget() {
   const name = document.getElementById('mb-name').value.trim();
   const amount = parseFloat(document.getElementById('mb-amount').value) || 0;
   const dir = document.getElementById('mb-dir').value;
-  const cat = document.getElementById('mb-cat').value.trim() || '\u00d6vrigt';
+  const cat = document.getElementById('mb-cat').value.trim() || 'Övrigt';
+  const day = parseInt(document.getElementById('mb-day').value) || null;
   if (!name) return;
   if (editingBudgetId) {
     const b = budget.find(x => x.id === editingBudgetId);
-    if (b) Object.assign(b, { name, amount, dir, cat });
+    if (b) Object.assign(b, { name, amount, dir, cat, day });
     editingBudgetId = null;
     const t = document.querySelector('#m-budget .modal-title');
-    if (t) t.textContent = 'Add Budget Item';
+    if (t) t.textContent = 'Lägg till post';
   } else {
-    budget.push({ id: Date.now(), name, amount, dir, cat });
+    budget.push({ id: Date.now(), name, amount, dir, cat, day });
   }
   S.set('budget', budget);
   closeModal('m-budget');
@@ -1203,8 +1392,10 @@ function editBudget(id) {
   document.getElementById('mb-amount').value = b.amount;
   document.getElementById('mb-dir').value = b.dir;
   document.getElementById('mb-cat').value = b.cat;
+  const dayEl = document.getElementById('mb-day');
+  if (dayEl) dayEl.value = b.day || '';
   const t = document.querySelector('#m-budget .modal-title');
-  if (t) t.textContent = 'Edit Budget Item';
+  if (t) t.textContent = 'Redigera post';
   openModal('m-budget');
 }
 
@@ -1213,7 +1404,6 @@ function deleteBudget(id) {
   S.set('budget', budget);
   renderBudget();
 }
-
 function fmtKr(n) { return n.toLocaleString('sv-SE', { minimumFractionDigits: 0, maximumFractionDigits: 2 }) + ' kr'; }
 
 // ===== STUDY / POMODORO =====

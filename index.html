@@ -262,25 +262,86 @@
 
 <!-- ────────────────── BUDGET ────────────────── -->
 <div class="view" id="view-budget">
-  <div class="view-hero h-budget" id="hero-budget"><button class="hero-edit-btn" onclick="setHeaderImage('budget')">✎ Edit header</button><div class="page-icon">💰</div></div>
+  <div class="view-hero h-budget" id="hero-budget"><button class="hero-edit-btn" onclick="setHeaderImage('budget')">Edit header</button><div class="page-icon">💰</div></div>
   <div class="view-content">
-    <h2 class="view-title">Budget – Lön & Räkningar</h2>
+    <h2 class="view-title">Budget</h2>
     <div class="pmeta" id="budget-month-label"></div>
+
+    <!-- Stats row -->
     <div class="bud-stats">
-      <div class="bstat"><div class="bstat-label">Inkomst</div><div class="bstat-value income-color" id="bi-total">0 kr</div></div>
-      <div class="bstat"><div class="bstat-label">Utgifter</div><div class="bstat-value expense-color" id="be-total">0 kr</div></div>
-      <div class="bstat"><div class="bstat-label">Balans</div><div class="bstat-value balance-color" id="bb-total">0 kr</div></div>
+      <div class="bstat">
+        <div class="bstat-label">Inkomst</div>
+        <div class="bstat-value income-color" id="bi-total">0 kr</div>
+      </div>
+      <div class="bstat">
+        <div class="bstat-label">Disponibelt</div>
+        <div class="bstat-value balance-color" id="bb-total">0 kr</div>
+        <div class="bstat-sub">efter fasta utgifter</div>
+      </div>
+      <div class="bstat">
+        <div class="bstat-label">Sparöverföring</div>
+        <div class="bstat-value" style="color:var(--teal)" id="bs-total">0 kr</div>
+        <div class="bstat-sub">rullar till sparkonto</div>
+      </div>
     </div>
-    <div class="section-header">
-      Alla poster
-      <button class="btn-link" onclick="openModal('m-budget')">+ Add Post</button>
-    </div>
-    <div class="card">
-      <div style="padding:0">
-        <table class="bud-table">
-          <thead><tr><th>Post</th><th>Belopp</th><th>Riktning</th><th>Kategori</th><th>Netto</th><th></th></tr></thead>
-          <tbody id="bud-tbody"></tbody>
-        </table>
+
+    <!-- Main layout: timeline left, savings+lifestyle right -->
+    <div class="bud-layout">
+
+      <!-- Left: chronological timeline -->
+      <div>
+        <div class="section-header" style="margin-bottom:12px">
+          Månadsöversikt
+          <button class="btn-link" onclick="openModal('m-budget')">+ Post</button>
+        </div>
+
+        <!-- Opening balance -->
+        <div class="card bud-opening-card">
+          <div class="card-body" style="display:flex;align-items:center;gap:10px;padding:10px 16px;flex-wrap:wrap">
+            <span style="font-size:13px;color:var(--tl);white-space:nowrap">Ingående saldo</span>
+            <input type="number" id="bud-opening-input" class="fi bud-opening-input" placeholder="0"
+              onchange="openingBalance=parseFloat(this.value)||0;S.set('openingBalance',openingBalance);renderBudget()">
+            <span style="font-size:13px;color:var(--tl)">kr</span>
+            <span style="font-size:11px;color:var(--tl);margin-left:auto">Vad har du på kontot just nu?</span>
+          </div>
+        </div>
+
+        <!-- Timeline table -->
+        <div class="card" style="padding:0;overflow:hidden;margin-top:10px">
+          <table class="bud-table bud-timeline-tbl">
+            <thead>
+              <tr>
+                <th class="bud-col-day">Datum</th>
+                <th>Händelse</th>
+                <th class="bud-col-in">In</th>
+                <th class="bud-col-out">Ut</th>
+                <th class="bud-col-bal">Saldo</th>
+                <th class="bud-col-act"></th>
+              </tr>
+            </thead>
+            <tbody id="bud-timeline"></tbody>
+            <tfoot id="bud-tfoot"></tfoot>
+          </table>
+        </div>
+        <div id="bud-saving-note" style="font-size:11px;color:var(--tl);margin-top:8px;padding:0 4px;display:none">
+          * Sparöverföringar (ISK, Opti) försvinner inte — de flyttas till sparkontot och räknas inte som utgift.
+        </div>
+      </div>
+
+      <!-- Right: savings + lifestyle -->
+      <div>
+        <div class="section-header" style="margin-bottom:12px">Sparbalans</div>
+        <div class="card" id="bud-savings-panel"></div>
+
+        <div class="section-header" style="margin-top:24px;margin-bottom:12px">
+          Livsstilsbudget
+          <button class="btn-link" onclick="openModal('m-lifestyle')">+ Köp</button>
+        </div>
+        <div class="card" id="bud-lifestyle-panel"></div>
+
+        <div style="margin-top:12px;font-size:11px;color:var(--tl);line-height:1.6;padding:0 2px">
+          Livsstilsbudget: 3 000 kr/mån för kläder, hår &amp; makeup. Oanvända pengar rullar över till nästa månad.
+        </div>
       </div>
     </div>
   </div>
@@ -648,27 +709,46 @@
   </div>
 </div>
 
-<!-- Add Budget -->
+<!-- Add / Edit Budget Post -->
 <div class="modal-bg" id="m-budget">
   <div class="modal">
-    <div class="modal-head"><div class="modal-title">Add Budget Post</div><button class="modal-close" onclick="closeModal('m-budget')">✕</button></div>
+    <div class="modal-head"><div class="modal-title">Lägg till post</div><button class="modal-close" onclick="closeModal('m-budget')">×</button></div>
     <div class="modal-body">
-      <div class="field"><label>Post</label><input class="fi" id="mb-name" placeholder="Lön"/></div>
+      <div class="field"><label>Namn</label><input class="fi" id="mb-name" placeholder="Studiestöd"/></div>
       <div class="field-row">
-        <div class="field"><label>Belopp (kr)</label><input type="number" class="fi" id="mb-amount" placeholder="4574"/></div>
-        <div class="field"><label>Riktning</label>
+        <div class="field"><label>Belopp (kr)</label><input type="number" class="fi" id="mb-amount" placeholder="0"/></div>
+        <div class="field"><label>Dag i månaden</label><input type="number" class="fi" id="mb-day" placeholder="24" min="1" max="31"/></div>
+      </div>
+      <div class="field-row">
+        <div class="field"><label>Typ</label>
           <select class="fi" id="mb-dir">
             <option value="income">Inkomst</option>
             <option value="expense">Utgift</option>
-            <option value="saving">Sparande</option>
+            <option value="saving">Sparöverföring</option>
           </select>
         </div>
+        <div class="field"><label>Kategori</label><input class="fi" id="mb-cat" placeholder="Prenumeration"/></div>
       </div>
-      <div class="field"><label>Kategori</label><input class="fi" id="mb-cat" placeholder="Övrigt"/></div>
     </div>
     <div class="modal-foot">
-      <button class="btn-secondary" onclick="closeModal('m-budget')">Cancel</button>
-      <button class="btn-primary" onclick="addBudget()">Add →</button>
+      <button class="btn-secondary" onclick="closeModal('m-budget')">Avbryt</button>
+      <button class="btn-primary" onclick="addBudget()">Spara</button>
+    </div>
+  </div>
+</div>
+
+<!-- Add Lifestyle Expense -->
+<div class="modal-bg" id="m-lifestyle">
+  <div class="modal">
+    <div class="modal-head"><div class="modal-title">Registrera köp</div><button class="modal-close" onclick="closeModal('m-lifestyle')">×</button></div>
+    <div class="modal-body">
+      <div style="font-size:12px;color:var(--tl);margin-bottom:14px">Kläder, hår, makeup — dras från livsstilsbudgeten (3 000 kr/mån rullande)</div>
+      <div class="field"><label>Vad köpte du?</label><input class="fi" id="ml-name" placeholder="Jacka från Zara"/></div>
+      <div class="field"><label>Belopp (kr)</label><input type="number" class="fi" id="ml-amount" placeholder="499"/></div>
+    </div>
+    <div class="modal-foot">
+      <button class="btn-secondary" onclick="closeModal('m-lifestyle')">Avbryt</button>
+      <button class="btn-primary" onclick="addLifestyleExpense()">Lägg till</button>
     </div>
   </div>
 </div>
