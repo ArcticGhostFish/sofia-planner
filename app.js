@@ -2665,15 +2665,27 @@ function renderSchedule() {
 function renderScheduleGCal() {
   const el = document.getElementById('schedule-gcal');
   if (!el) return;
-  // Get Mon–Sun of current week
   const now = new Date();
-  const dow = (now.getDay() + 6) % 7; // 0=Mon
-  const weekStart = new Date(now); weekStart.setDate(now.getDate() - dow); weekStart.setHours(0,0,0,0);
-  const weekEnd = new Date(weekStart); weekEnd.setDate(weekStart.getDate() + 7);
   const todayStr = now.toLocaleDateString('sv-SE');
 
+  // Use the currently displayed schedule week's date range, fallback to current calendar week
+  const activeWeek = schedule[schedWeekIdx];
+  let weekStartStr, weekEndStr;
+  if (activeWeek?.days?.length) {
+    weekStartStr = activeWeek.days[0].date;
+    weekEndStr   = activeWeek.days[activeWeek.days.length - 1].date;
+  } else {
+    const dow = (now.getDay() + 6) % 7;
+    const ws = new Date(now); ws.setDate(now.getDate() - dow);
+    const we = new Date(ws); we.setDate(ws.getDate() + 4);
+    weekStartStr = ws.toLocaleDateString('sv-SE');
+    weekEndStr   = we.toLocaleDateString('sv-SE');
+  }
+  const weekStart = new Date(weekStartStr); weekStart.setHours(0,0,0,0);
+  const weekEnd   = new Date(weekEndStr);   weekEnd.setHours(23,59,59,999);
+
   // Manual events this week
-  const manualThisWeek = manualGcalEvents.filter(e => e.date >= weekStart.toLocaleDateString('sv-SE') && e.date <= weekEnd.toLocaleDateString('sv-SE'))
+  const manualThisWeek = manualGcalEvents.filter(e => e.date >= weekStartStr && e.date <= weekEndStr)
     .sort((a,b) => a.date.localeCompare(b.date));
 
   // GCal events this week
