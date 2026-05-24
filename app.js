@@ -12,7 +12,7 @@ let diary    = S.get('diary')   || [{ id: 1, title: 'Wednesday feeling', date: '
 let habits   = S.get('habits')  || [{ id: 1, name: 'Drink Water', emoji: '🫗' }, { id: 2, name: 'Skincare (Morning)', emoji: '🧴' }, { id: 3, name: 'Brush Teeth', emoji: '🪥' }, { id: 4, name: 'Workout', emoji: '🏋️' }, { id: 5, name: '10.000 Steps', emoji: '🚶' }, { id: 6, name: 'Study (1 hour)', emoji: '📖' }, { id: 7, name: 'Skincare (Night)', emoji: '🌙' }, { id: 8, name: 'Read', emoji: '📚' }];
 let hChecks  = S.get('hChecks') || {};
 const BUDGET_DEFAULTS = [
-  {id:1, name:'Studiestöd',    amount:13804,  dir:'income',  cat:'Inkomst',       day:24},
+  {id:1, name:'Studiestöd',    amount:13804,  dir:'income',  cat:'Inkomst',       day:25},
   {id:2, name:'Barnbidrag',    amount:1250,   dir:'income',  cat:'Inkomst',       day:20},
   {id:3, name:'Adobe',         amount:231,    dir:'expense', cat:'Prenumeration', day:10},
   {id:4, name:'Online träning',amount:550,    dir:'expense', cat:'Träning',       day:11, isEur:true},
