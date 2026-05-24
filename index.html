@@ -410,54 +410,16 @@
 
 <!-- ────────────────── LIFE PLANNER ────────────────── -->
 <div class="view" id="view-planner">
-  <div class="view-hero h-life" id="hero-planner"><button class="hero-edit-btn" onclick="setHeaderImage('planner')">✎ Edit header</button><div class="page-icon">📅</div></div>
+  <div class="view-hero h-life" id="hero-planner"><button class="hero-edit-btn" onclick="setHeaderImage('planner')">Edit header</button><div class="page-icon">📅</div></div>
   <div class="view-content">
     <h2 class="view-title">Life Planner</h2>
     <div class="pmeta" id="planner-month-label"></div>
-    <!-- Top row: Schedule + GCal/Budget -->
-    <div class="planner-layout">
-      <!-- Schedule column -->
-      <div>
-        <div class="section-header" style="margin-bottom:10px">
-          Class Schedule · <em id="schedule-month-label"></em>
-          <div style="display:flex;gap:5px;flex-wrap:wrap">
-            <button class="btn-link" onclick="openAddSchedWeek()">+ Week</button>
-            <button class="btn-link" id="sched-edit-btn" onclick="toggleSchedEditMode()">✎ Edit</button>
-            <button class="btn-link" onclick="archiveScheduleWeek()" title="Move this week to history and start fresh" style="color:var(--tl)">Archive →</button>
-            <button class="btn-link" onclick="toggleScheduleHistory()" style="color:var(--tl)">History</button>
-          </div>
-        </div>
-        <div id="schedule-container"></div>
-        <div id="schedule-history"></div>
-        <div id="schedule-gcal"></div>
-      </div>
-      <!-- Right column: GCal + Budget + Quick Links -->
-      <div>
-        <div class="section-header" style="margin-bottom:10px">Google Calendar</div>
-        <div class="card">
-          <div class="card-body" id="gcal-events" style="min-height:80px">
-            <div class="gcal-widget-empty">Not connected. Click "Google Cal" in sidebar to set up.</div>
-          </div>
-        </div>
-        <div class="section-header" style="margin-top:16px;margin-bottom:10px">Budget Snapshot</div>
-        <div class="card" id="planner-bud-snap">
-          <div class="card-body" style="font-size:13px;color:var(--tl)">Loading...</div>
-        </div>
-        <div class="section-header" style="margin-top:16px;margin-bottom:10px">Quick Links</div>
-        <div class="card">
-          <div class="card-body" style="padding:8px 10px;display:flex;flex-direction:column;gap:2px">
-            <a href="https://itslearning.com" target="_blank" style="font-size:13px;color:var(--teal-d);padding:5px 0;display:block;text-decoration:none">🎓 ITSLEARNING</a>
-            <a href="https://mail.google.com" target="_blank" style="font-size:13px;color:var(--teal-d);padding:5px 0;display:block;text-decoration:none">📧 E-mail</a>
-            <a href="https://notebooklm.google.com" target="_blank" style="font-size:13px;color:var(--teal-d);padding:5px 0;display:block;text-decoration:none">📖 Notebook LM</a>
-          </div>
-        </div>
-      </div>
-    </div>
-    <!-- Calendar — full width at the bottom, month view -->
+
+    <!-- Calendar — full width, prominent -->
     <div class="planner-cal-bottom">
-      <div class="section-header" style="margin-bottom:10px">
-        Planner
-        <div style="display:flex;gap:4px">
+      <div class="section-header" style="margin-bottom:14px">
+        Calendar
+        <div style="display:flex;gap:6px;align-items:center">
           <button id="cal-view-month" class="cal-view-btn active" onclick="setCalView('month')">Month</button>
           <button id="cal-view-week" class="cal-view-btn" onclick="setCalView('week')">Week</button>
           <button id="cal-view-day" class="cal-view-btn" onclick="setCalView('day')">Day</button>
@@ -468,11 +430,51 @@
           <div class="cal-nav">
             <button class="cal-nb" onclick="calPrev()">‹</button>
             <div class="cal-title" id="cal-title-main"></div>
-            <button class="cal-today-btn" onclick="calGoToday()" title="Jump to today">Today</button>
+            <button class="cal-today-btn" onclick="calGoToday()">Today</button>
             <button class="cal-nb" onclick="calNext()">›</button>
           </div>
           <div id="cal-grid-main"></div>
-          <div id="cal-events-list" style="margin-top:10px;font-size:12px"></div>
+          <div id="cal-events-list" style="margin-top:12px"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Below calendar: Schedule + Right sidebar -->
+    <div class="planner-layout" style="margin-top:28px">
+      <!-- Schedule column -->
+      <div>
+        <div class="section-header" style="margin-bottom:12px">
+          Class Schedule · <em id="schedule-month-label"></em>
+          <div style="display:flex;gap:6px;flex-wrap:wrap">
+            <button class="btn-link" onclick="openAddSchedWeek()">+ Week</button>
+            <button class="btn-link" id="sched-edit-btn" onclick="toggleSchedEditMode()">Edit</button>
+            <button class="btn-link" onclick="archiveScheduleWeek()" style="color:var(--tl)">Archive</button>
+            <button class="btn-link" onclick="toggleScheduleHistory()" style="color:var(--tl)">History</button>
+          </div>
+        </div>
+        <div id="schedule-container"></div>
+        <div id="schedule-history"></div>
+        <div id="schedule-gcal"></div>
+      </div>
+      <!-- Right column: GCal + Budget + Quick Links -->
+      <div>
+        <div class="section-header" style="margin-bottom:12px">Google Calendar</div>
+        <div class="card">
+          <div class="card-body" id="gcal-events" style="min-height:80px">
+            <div class="gcal-widget-empty">Not connected. Click "Google Cal" in sidebar to set up.</div>
+          </div>
+        </div>
+        <div class="section-header" style="margin-top:20px;margin-bottom:12px">Budget Snapshot</div>
+        <div class="card" id="planner-bud-snap">
+          <div class="card-body" style="font-size:13px;color:var(--tl)">Loading...</div>
+        </div>
+        <div class="section-header" style="margin-top:20px;margin-bottom:12px">Quick Links</div>
+        <div class="card">
+          <div class="card-body" style="padding:6px 12px;display:flex;flex-direction:column;gap:0">
+            <a href="https://itslearning.com" target="_blank" style="font-size:13px;color:var(--teal-d);padding:7px 0;display:block;text-decoration:none;border-bottom:1px solid var(--border)">ITSLEARNING</a>
+            <a href="https://mail.google.com" target="_blank" style="font-size:13px;color:var(--teal-d);padding:7px 0;display:block;text-decoration:none;border-bottom:1px solid var(--border)">E-mail</a>
+            <a href="https://notebooklm.google.com" target="_blank" style="font-size:13px;color:var(--teal-d);padding:7px 0;display:block;text-decoration:none">Notebook LM</a>
+          </div>
         </div>
       </div>
     </div>

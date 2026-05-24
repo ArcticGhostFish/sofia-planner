@@ -1,4 +1,4 @@
-/* ===== Sofia's Life Planner – App Logic ===== */
+﻿/* ===== Sofia's Life Planner – App Logic ===== */
 
 // ===== STORAGE =====
 const S = {
@@ -2187,7 +2187,7 @@ function renderCalMonth() {
     if (hasTasks) evColors.push('var(--rose)');
     if (hasDiary) evColors.push('var(--sage)');
     const dots = evColors.slice(0, 4).map(c => `<span class="cal-dot" style="background:${c}"></span>`).join('');
-    html += `<div class="cal-day${isT ? ' today' : ''}${hasEv ? ' has-event' : ''}" onclick="selectCalDay(${d},${calM},${calY})">${d}${dots ? `<div class="cal-dots">${dots}</div>` : ''}</div>`;
+    html += `<div class="cal-day${isT ? ' today' : ''}${hasEv ? ' has-event' : ''}" onclick="selectCalDay(${d},${calM},${calY})"><span class="cal-day-num">${d}</span>${dots ? `<div class="cal-dots">${dots}</div>` : ''}</div>`;
   }
   el.innerHTML = html;
 
@@ -2196,14 +2196,14 @@ function renderCalMonth() {
   if (evEl) {
     evEl.innerHTML = monthEvents.length ? monthEvents.map(e =>
       `<div class="cal-event-item">
-        <span>📅 ${e.date.slice(5)} · ${escHtml(e.title)}</span>
-        <div style="display:flex;gap:4px">
-          <button onclick="editCalEvent(${e.id})" style="background:none;border:none;color:var(--tl);cursor:pointer;font-size:11px" title="Edit">✏️</button>
-          <button onclick="duplicateCalEvent(${e.id})" style="background:none;border:none;color:var(--tl);cursor:pointer;font-size:10px" title="Duplicate">⧉</button>
-          <button onclick="removeCalEvent(${e.id})" style="background:none;border:none;color:var(--tl);cursor:pointer;font-size:11px">✕</button>
+        <span style="font-size:13px">${e.date.slice(5)} &middot; ${escHtml(e.title)}</span>
+        <div class="cal-ev-actions">
+          <button class="cal-ev-btn" onclick="editCalEvent(${e.id})" title="Edit">Edit</button>
+          <button class="cal-ev-btn" onclick="duplicateCalEvent(${e.id})" title="Duplicate">Copy</button>
+          <button class="cal-ev-btn" onclick="removeCalEvent(${e.id})" title="Delete">Delete</button>
         </div>
       </div>`
-    ).join('') : '<div style="font-size:12px;color:var(--tl);font-style:italic">Click any day to see details or add an event</div>';
+    ).join('') : '<div style="font-size:13px;color:var(--tl);padding:4px 0">Click any day to view or add events</div>';
   }
   renderGCalEvents();
 }
@@ -2220,28 +2220,28 @@ function selectCalDay(d, month, year) {
 
   const dateLabel = new Date(dStr).toLocaleDateString('sv-SE', { weekday: 'long', day: 'numeric', month: 'long' });
 
-  const evRows = [...dayEvs.map(e => `<div style="display:flex;align-items:center;gap:6px;font-size:13px;padding:3px 0">
-    <span style="color:var(--tl);min-width:44px">${e.time || 'All day'}</span>
+  const evRows = [...dayEvs.map(e => `<div style="display:flex;align-items:center;gap:8px;font-size:13px;padding:4px 0">
+    <span style="color:var(--tl);min-width:52px;font-size:11px">${e.time || 'All day'}</span>
     <span style="flex:1">${escHtml(e.title)}</span>
-    <button onclick="editCalEvent(${e.id})" style="background:none;border:none;color:var(--tl);cursor:pointer;font-size:11px">✏️</button>
-    <button onclick="removeCalEvent(${e.id});selectCalDay(${d},${month},${year})" style="background:none;border:none;color:var(--tl);cursor:pointer;font-size:11px">✕</button>
+    <button class="cal-ev-btn" onclick="editCalEvent(${e.id})">Edit</button>
+    <button class="cal-ev-btn" onclick="removeCalEvent(${e.id});selectCalDay(${d},${month},${year})">Delete</button>
   </div>`),
-  ...gcalDayEvs.map(e => `<div style="font-size:13px;padding:3px 0;color:var(--teal)">🗓 ${escHtml(e.summary || 'GCal event')}</div>`)].join('') || '<div style="font-size:12px;color:var(--tl);font-style:italic;padding:3px 0">No events</div>';
+  ...gcalDayEvs.map(e => `<div style="font-size:13px;padding:4px 0;color:var(--teal-d)">${escHtml(e.summary || 'GCal event')}</div>`)].join('') || '<div style="font-size:13px;color:var(--tl);padding:4px 0">No events this day</div>';
 
-  const taskRows = dayTasks.map(t => `<div style="font-size:13px;padding:2px 0">✅ ${escHtml(t.title)}</div>`).join('') || '';
+  const taskRows = dayTasks.map(t => `<div style="font-size:13px;padding:2px 0;color:var(--tm)">· ${escHtml(t.title)}</div>`).join('') || '';
 
   evEl.innerHTML = `
-    <div style="padding:10px 0 6px;border-top:1px solid var(--border);margin-top:8px">
-      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
-        <strong style="font-size:14px;color:var(--td)">${dateLabel}</strong>
-        <button onclick="document.getElementById('cal-events-list').innerHTML=''" style="background:none;border:none;cursor:pointer;color:var(--tl);font-size:13px">✕</button>
+    <div style="padding:12px 0 6px;border-top:1px solid var(--border);margin-top:10px">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
+        <strong style="font-size:15px;color:var(--td);font-family:'Playfair Display',serif">${dateLabel}</strong>
+        <button class="cal-ev-btn" onclick="document.getElementById('cal-events-list').innerHTML=''">Close</button>
       </div>
       ${evRows}
-      ${taskRows ? `<div style="margin-top:4px;padding-top:4px;border-top:1px solid var(--border)">${taskRows}</div>` : ''}
-      <div style="display:flex;gap:8px;margin-top:10px;flex-wrap:wrap">
-        <button class="btn-primary" style="font-size:12px;padding:5px 10px" onclick="openAddTaskForDate('${dStr}')">✅ Add Task</button>
-        <button class="btn-secondary" style="font-size:12px;padding:5px 10px" onclick="openJournalForDate('${dStr}')">📔 ${hasDiary ? 'Journal' : 'Write Journal'}</button>
-        <button class="btn-secondary" style="font-size:12px;padding:5px 10px" onclick="openAddCalEvent(${d},${month},${year})">＋ Event</button>
+      ${taskRows ? `<div style="margin-top:6px;padding-top:6px;border-top:1px solid var(--border);font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.06em;color:var(--tl);margin-bottom:4px">Tasks</div>${taskRows}` : ''}
+      <div style="display:flex;gap:8px;margin-top:12px;flex-wrap:wrap">
+        <button class="btn-primary" style="font-size:12px;padding:5px 12px" onclick="openAddTaskForDate('${dStr}')">+ Task</button>
+        <button class="btn-secondary" style="font-size:12px;padding:5px 12px" onclick="openJournalForDate('${dStr}')">${hasDiary ? 'Journal' : '+ Journal'}</button>
+        <button class="btn-secondary" style="font-size:12px;padding:5px 12px" onclick="openAddCalEvent(${d},${month},${year})">+ Event</button>
       </div>
     </div>`;
 }
@@ -2273,8 +2273,8 @@ function renderCalWeek() {
         const gcalSlotEvs = gcalDayEvs.filter(e => { if (!e.start?.dateTime) return false; return new Date(e.start.dateTime).getHours() === h; });
         const allDayEvs = h === 7 ? dayEvs.filter(e => !e.time) : [];
         return `<div class="cal-week-slot" onclick="openAddCalEventWithTime('${dStr}',${h})">
-          ${allDayEvs.map(e => `<div class="cal-week-ev" onclick="event.stopPropagation()">${escHtml(e.title)}<button onclick="editCalEvent(${e.id});event.stopPropagation()" style="background:none;border:none;color:inherit;cursor:pointer;font-size:9px;margin-left:3px" title="Edit">✏️</button><button onclick="removeCalEvent(${e.id});event.stopPropagation()" style="background:none;border:none;color:inherit;cursor:pointer;font-size:9px;margin-left:2px">✕</button></div>`).join('')}
-          ${slotEvs.map(e => `<div class="cal-week-ev" onclick="event.stopPropagation()">${escHtml(e.title)}<button onclick="editCalEvent(${e.id});event.stopPropagation()" style="background:none;border:none;color:inherit;cursor:pointer;font-size:9px;margin-left:3px" title="Edit">✏️</button><button onclick="removeCalEvent(${e.id});event.stopPropagation()" style="background:none;border:none;color:inherit;cursor:pointer;font-size:9px;margin-left:2px">✕</button></div>`).join('')}
+          ${allDayEvs.map(e => `<div class="cal-week-ev" onclick="event.stopPropagation()" title="${escHtml(e.title)}">${escHtml(e.title)}<button onclick="removeCalEvent(${e.id});event.stopPropagation()" style="background:none;border:none;color:inherit;cursor:pointer;font-size:9px;padding:0 2px;opacity:.6" title="Remove">×</button></div>`).join('')}
+          ${slotEvs.map(e => `<div class="cal-week-ev" onclick="event.stopPropagation()" title="${escHtml(e.title)}">${escHtml(e.title)}<button onclick="removeCalEvent(${e.id});event.stopPropagation()" style="background:none;border:none;color:inherit;cursor:pointer;font-size:9px;padding:0 2px;opacity:.6" title="Remove">×</button></div>`).join('')}
           ${gcalSlotEvs.map(e => `<div class="cal-week-ev gcal-ev">${escHtml(e.summary || 'Event')}</div>`).join('')}
         </div>`;
       }).join('')}
@@ -2306,8 +2306,8 @@ function renderCalDay() {
     html += `<div class="cal-day-row" onclick="openAddCalEventWithTime('${dStr}',${h})">
       <div class="cal-day-hour">${h}:00</div>
       <div class="cal-day-slot">
-        ${allDay.map(e => `<div class="cal-week-ev" onclick="event.stopPropagation()">${escHtml(e.title)}<button onclick="editCalEvent(${e.id});event.stopPropagation()" style="background:none;border:none;color:inherit;cursor:pointer;font-size:9px;margin-left:3px" title="Edit">✏️</button><button onclick="removeCalEvent(${e.id});event.stopPropagation()" style="background:none;border:none;color:inherit;cursor:pointer;font-size:9px;margin-left:2px">✕</button></div>`).join('')}
-        ${slotEvs.map(e => `<div class="cal-week-ev" onclick="event.stopPropagation()">${escHtml(e.title)}<button onclick="editCalEvent(${e.id});event.stopPropagation()" style="background:none;border:none;color:inherit;cursor:pointer;font-size:9px;margin-left:3px" title="Edit">✏️</button><button onclick="removeCalEvent(${e.id});event.stopPropagation()" style="background:none;border:none;color:inherit;cursor:pointer;font-size:9px;margin-left:2px">✕</button></div>`).join('')}
+        ${allDay.map(e => `<div class="cal-week-ev" onclick="event.stopPropagation()" title="${escHtml(e.title)}">${escHtml(e.title)}<button onclick="removeCalEvent(${e.id});event.stopPropagation()" style="background:none;border:none;color:inherit;cursor:pointer;font-size:9px;padding:0 2px;opacity:.6">×</button></div>`).join('')}
+        ${slotEvs.map(e => `<div class="cal-week-ev" onclick="event.stopPropagation()" title="${escHtml(e.title)}">${escHtml(e.title)}<button onclick="removeCalEvent(${e.id});event.stopPropagation()" style="background:none;border:none;color:inherit;cursor:pointer;font-size:9px;padding:0 2px;opacity:.6">×</button></div>`).join('')}
         ${gcalSlotEvs.map(e => `<div class="cal-week-ev gcal-ev">${escHtml(e.summary || 'Event')}</div>`).join('')}
       </div>
     </div>`;
@@ -2386,7 +2386,7 @@ function renderSchedule() {
       const clickAttr = matchedClass && !schedEditMode ? `onclick="openClassInStudyHub(${matchedClass.id})" title="Open in Study Hub" style="cursor:pointer"` : `title="Double-click to edit"`;
       return `<div class="class-pill sched-h-pill${isHidden ? ' sched-pill-hidden' : ''}" data-week="${week.id}" data-day="${dayIdx}" ${pillColor ? `style="${pillColor}"` : ''}>
         <span id="scls-${week.id}-${dayIdx}-${clsIdx}" ondblclick="inlineEditSchedClass(${week.id},${dayIdx},${clsIdx})" ${clickAttr}>${escHtml(c)}</span>
-        ${schedEditMode ? `<button onclick="inlineEditSchedClass(${week.id},${dayIdx},${clsIdx})" class="sched-pill-del" style="color:var(--tl)" title="Edit">✏️</button><button onclick="removeScheduleClass(${week.id},${dayIdx},${clsIdx})" class="sched-pill-del" title="Remove">\u2715</button>` : ''}
+        ${schedEditMode ? `<button onclick="inlineEditSchedClass(${week.id},${dayIdx},${clsIdx})" class="sched-pill-del" style="color:var(--tl);font-size:9px" title="Edit">Edit</button><button onclick="removeScheduleClass(${week.id},${dayIdx},${clsIdx})" class="sched-pill-del" style="font-size:9px" title="Remove">x</button>` : '')}
       </div>`;
     }).join('');
 
@@ -2406,7 +2406,7 @@ function renderSchedule() {
   }).join('');
 
   const delWeekBtn = schedEditMode
-    ? `<button onclick="removeScheduleWeek(${week.id})" class="btn-link" style="color:var(--rose);font-size:11px;margin-top:6px">✕ Remove week</button>`
+    ? `<button onclick="removeScheduleWeek(${week.id})" class="btn-link" style="color:var(--rose);font-size:11px;margin-top:6px">Remove week</button>`
     : '';
 
   el.innerHTML = `<div class="card"><div style="padding:8px 10px">${nav}<div class="sched-h-grid">${cols}</div>${delWeekBtn}</div></div>`;
