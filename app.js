@@ -1329,7 +1329,16 @@ function renderLifestyleBudget() {
   if (!el) return;
   const MONTHLY = 3000;
   const now = new Date();
+  const todayDay = now.getDate();
   const curMK = now.getFullYear() + '-' + String(now.getMonth()+1).padStart(2,'0');
+
+  // Only unlock after the main payday (latest income day this month)
+  const payDay = Math.max(...budget.filter(b => b.dir === 'income' && b.day).map(b => b.day));
+  if (todayDay < payDay) {
+    el.innerHTML = '<div style="padding:14px 16px;font-size:13px;color:var(--tl);text-align:center">' +
+      'Tillgänglig från <strong style="color:var(--td)">' + payDay + ':e</strong> — efter löning</div>';
+    return;
+  }
 
   let carryover = 0;
   for (let i = 3; i >= 1; i--) {
