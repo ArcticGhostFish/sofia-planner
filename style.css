@@ -673,6 +673,7 @@ body {
 .bud-row-expense td { background: rgba(196,122,122,.04); }
 .bud-row-saving td { background: rgba(201,160,110,.06); }
 .bud-row-zero td { background: transparent; }
+.bud-row-past td { background: transparent; opacity: .45; text-decoration: line-through; }
 
 .bud-timeline-tbl tbody tr:hover td { filter: brightness(.97); }
 

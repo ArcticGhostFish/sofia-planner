@@ -1218,14 +1218,21 @@ function renderBudget() {
   if (bsEl) bsEl.textContent = fmtKr(sav);
   if (beEl) beEl.textContent = '-' + fmtKr(exp);
 
+  const todayDay = now.getDate();
   const sorted = [...items].sort((a, b) => (a.day || 31) - (b.day || 31));
+  // Split into past (already happened) and upcoming (today or later)
+  const upcoming = sorted.filter(b => !b.day || b.day >= todayDay);
+  const past     = sorted.filter(b => b.day && b.day < todayDay);
+  const allRows  = [...upcoming, ...past]; // upcoming first, past greyed at bottom
+
   let runBal = openingBalance || 0;
   let hasSav = false;
 
-  const rows = sorted.map(b => {
+  const rows = allRows.map(b => {
     const isInc = b.dir === 'income', isSav = b.dir === 'saving';
+    const isPast = b.day && b.day < todayDay;
     if (isSav) hasSav = true;
-    if (isInc) runBal += b.amount; else runBal -= b.amount;
+    if (!isPast) { if (isInc) runBal += b.amount; else runBal -= b.amount; }
 
     const dayStr = b.day ? b.day + ':e' : '---';
     const nameStr = isSav
@@ -1244,15 +1251,15 @@ function renderBudget() {
       outCell = '<span class="bud-out-amt">' + fmtKr(b.amount) + (isSav ? ' *' : '') + '</span>';
     }
 
-    const rowCls = isInc ? 'bud-row-income' : isSav ? 'bud-row-saving' : (b.amount===0 ? 'bud-row-zero' : 'bud-row-expense');
+    const rowCls = (isPast ? 'bud-row-past' : (isInc ? 'bud-row-income' : isSav ? 'bud-row-saving' : (b.amount===0 ? 'bud-row-zero' : 'bud-row-expense')));
     const balCls = runBal < 0 ? 'bud-bal-neg' : '';
 
     return '<tr class="' + rowCls + '">' +
       '<td class="bud-col-day">' + dayStr + '</td>' +
       '<td class="bud-col-name">' + nameStr + noteStr + '</td>' +
-      '<td class="bud-col-in">' + inCell + '</td>' +
-      '<td class="bud-col-out">' + outCell + '</td>' +
-      '<td class="bud-col-bal ' + balCls + '">' + fmtKr(runBal) + '</td>' +
+      '<td class="bud-col-in">' + (isPast ? '' : inCell) + '</td>' +
+      '<td class="bud-col-out">' + (isPast ? '' : outCell) + '</td>' +
+      '<td class="bud-col-bal">' + (isPast ? '<span style="color:var(--tl);font-size:11px">redan betald</span>' : '<span class="' + balCls + '">' + fmtKr(runBal) + '</span>') + '</td>' +
       '<td class="bud-col-act">' +
         '<button class="bud-act-btn" onclick="editBudget(' + b.id + ')">Edit</button>' +
         '<button class="bud-act-btn bud-act-del" onclick="deleteBudget(' + b.id + ')">x</button>' +
