@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="sv">
 <head>
   <meta charset="UTF-8">
@@ -48,19 +48,19 @@
 
   <div class="sb-nav">
     <div class="sb-section">
-      <div class="sb-item active" data-view="home"><span class="sb-icon">🏠</span> Hem</div>
-      <div class="sb-item" data-view="today"><span class="sb-icon">☀️</span> Today</div>
+      <div class="sb-item active" data-view="home"><span class="sb-icon sb-dot"></span> Hem</div>
+      <div class="sb-item" data-view="today"><span class="sb-icon sb-dot"></span> Today</div>
       <div class="sb-group-label">Life</div>
-      <div class="sb-item" data-view="journal"><span class="sb-icon">📔</span> Journal</div>
-      <div class="sb-item" data-view="habits"><span class="sb-icon">✓</span> Habits</div>
-      <div class="sb-item" data-view="budget"><span class="sb-icon">💰</span> Budget</div>
-      <div class="sb-item" data-view="scrapbook"><span class="sb-icon">🖼</span> Scrapbook</div>
+      <div class="sb-item" data-view="journal"><span class="sb-icon sb-dot"></span> Journal</div>
+      <div class="sb-item" data-view="habits"><span class="sb-icon sb-dot"></span> Habits</div>
+      <div class="sb-item" data-view="budget"><span class="sb-icon sb-dot"></span> Budget</div>
+      <div class="sb-item" data-view="scrapbook"><span class="sb-icon sb-dot"></span> Scrapbook</div>
       <div class="sb-group-label">Academic</div>
-      <div class="sb-item" data-view="study"><span class="sb-icon">📚</span> Study Hub</div>
-      <div class="sb-item" data-view="notes"><span class="sb-icon">📝</span> Notes</div>
-      <div class="sb-item" data-view="tasks"><span class="sb-icon">✅</span> Tasks</div>
+      <div class="sb-item" data-view="study"><span class="sb-icon sb-dot"></span> Study Hub</div>
+      <div class="sb-item" data-view="notes"><span class="sb-icon sb-dot"></span> Notes</div>
+      <div class="sb-item" data-view="tasks"><span class="sb-icon sb-dot"></span> Tasks</div>
       <div class="sb-group-label">Planning</div>
-      <div class="sb-item" data-view="planner"><span class="sb-icon">📅</span> Life Planner</div>
+      <div class="sb-item" data-view="planner"><span class="sb-icon sb-dot"></span> Life Planner</div>
     </div>
     <div class="sb-section">
       <div class="sb-upcoming-label" id="sb-upcoming-label">Today</div>
@@ -70,10 +70,10 @@
 
   <div class="sb-footer">
     <div id="sb-date"></div>
-    <button class="sb-gcal-btn" id="sb-gcal-btn" onclick="toggleGCal()">📅 Google Cal</button>
-    <button class="sb-gcal-btn" id="dark-mode-btn" onclick="toggleDarkMode()">🌙 Dark</button>
-    <button class="sb-gcal-btn" onclick="exportData()">💾 Backup</button>
-    <label class="sb-gcal-btn" style="cursor:pointer">📥 Restore <input type="file" accept=".json" style="display:none" onchange="importData(this)"></label>
+    <button class="sb-gcal-btn" id="sb-gcal-btn" onclick="toggleGCal()">Google Cal</button>
+    <button class="sb-gcal-btn" id="dark-mode-btn" onclick="toggleDarkMode()">Dark</button>
+    <button class="sb-gcal-btn" onclick="exportData()">Backup</button>
+    <label class="sb-gcal-btn" style="cursor:pointer">Restore <input type="file" accept=".json" style="display:none" onchange="importData(this)"></label>
   </div>
 </nav>
 
