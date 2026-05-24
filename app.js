@@ -23,9 +23,19 @@ const BUDGET_DEFAULTS = [
   {id:9, name:'Opti',          amount:300,    dir:'saving',  cat:'Sparande',      day:30},
 ];
 const _rawBudget = S.get('budget');
-let budget = (_rawBudget && _rawBudget.length && _rawBudget[0]?.day !== undefined)
-  ? _rawBudget : JSON.parse(JSON.stringify(BUDGET_DEFAULTS));
-if (!(_rawBudget && _rawBudget.length && _rawBudget[0]?.day !== undefined)) S.set('budget', budget);
+const _DEFAULT_IDS = new Set([1,2,3,4,5,6,7,8,9]);
+let budget;
+if (_rawBudget && _rawBudget.length && _rawBudget[0]?.dir !== undefined) {
+  // New schema present — merge: keep defaults (possibly user-edited) + any custom entries
+  const _defs = JSON.parse(JSON.stringify(BUDGET_DEFAULTS));
+  _rawBudget.filter(b => _DEFAULT_IDS.has(b.id)).forEach(s => {
+    const i = _defs.findIndex(d => d.id === s.id); if (i >= 0) _defs[i] = s;
+  });
+  budget = [..._defs, ..._rawBudget.filter(b => !_DEFAULT_IDS.has(b.id))];
+} else {
+  budget = JSON.parse(JSON.stringify(BUDGET_DEFAULTS));
+}
+S.set('budget', budget);
 // photos (legacy) removed — all photos now in scrapbookPhotos
 
 // Class Schedule – stored in localStorage, editable via UI
