@@ -2586,7 +2586,7 @@ function renderSchedule() {
       const clickAttr = matchedClass && !schedEditMode ? `onclick="openClassInStudyHub(${matchedClass.id})" title="Open in Study Hub" style="cursor:pointer"` : `title="Double-click to edit"`;
       return `<div class="class-pill sched-h-pill${isHidden ? ' sched-pill-hidden' : ''}" data-week="${week.id}" data-day="${dayIdx}" ${pillColor ? `style="${pillColor}"` : ''}>
         <span id="scls-${week.id}-${dayIdx}-${clsIdx}" ondblclick="inlineEditSchedClass(${week.id},${dayIdx},${clsIdx})" ${clickAttr}>${escHtml(c)}</span>
-        ${schedEditMode ? `<button onclick="inlineEditSchedClass(${week.id},${dayIdx},${clsIdx})" class="sched-pill-del" style="color:var(--tl);font-size:9px" title="Edit">Edit</button><button onclick="removeScheduleClass(${week.id},${dayIdx},${clsIdx})" class="sched-pill-del" style="font-size:9px" title="Remove">x</button>` : '')}
+        ${schedEditMode ? `<button onclick="inlineEditSchedClass(${week.id},${dayIdx},${clsIdx})" class="sched-pill-del" style="color:var(--tl);font-size:9px" title="Edit">Edit</button><button onclick="removeScheduleClass(${week.id},${dayIdx},${clsIdx})" class="sched-pill-del" style="font-size:9px" title="Remove">x</button>` : ''}
       </div>`;
     }).join('');
 
