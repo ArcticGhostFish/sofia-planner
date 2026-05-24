@@ -1192,7 +1192,7 @@ function renderBudget() {
   if (bml) bml.textContent = MONTH_NAMES[m] + ' ' + y;
 
   const oi = document.getElementById('bud-opening-input');
-  if (oi && !oi._init) { oi.value = openingBalance || ''; oi._init = true; }
+  if (oi && document.activeElement !== oi) { oi.value = openingBalance || ''; }
 
   const items = budget.map(b => {
     if (b.name === 'Studiestod' || b.name === 'Studiestöd') {
