@@ -2612,9 +2612,9 @@ function renderSchedule() {
   const todayStr2 = now.toLocaleDateString('sv-SE');
   if (latestFriStr && latestFriStr < todayStr2) {
     autoCreateWeek(nextMon);
-    schedWeekIdx = schedule.length - 1;
   }
-  schedWeekIdx = Math.max(0, Math.min(schedWeekIdx, schedule.length - 1));
+  // Always land on the latest week — user can navigate back if they want
+  schedWeekIdx = schedule.length - 1;
   const week = schedule[schedWeekIdx];
   const DAY_FULL = ['M\u00e5n', 'Tis', 'Ons', 'Tor', 'Fre'];
   const COLLAPSE_AT = 2; // show this many pills before "show more"
