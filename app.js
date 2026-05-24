@@ -26,10 +26,11 @@ const _rawBudget = S.get('budget');
 const _DEFAULT_IDS = new Set([1,2,3,4,5,6,7,8,9]);
 let budget;
 if (_rawBudget && _rawBudget.length && _rawBudget[0]?.dir !== undefined) {
-  // New schema present — merge: keep defaults (possibly user-edited) + any custom entries
+  // New schema present — merge: keep user edits to name/amount, always use default day/dir/cat
   const _defs = JSON.parse(JSON.stringify(BUDGET_DEFAULTS));
   _rawBudget.filter(b => _DEFAULT_IDS.has(b.id)).forEach(s => {
-    const i = _defs.findIndex(d => d.id === s.id); if (i >= 0) _defs[i] = s;
+    const i = _defs.findIndex(d => d.id === s.id);
+    if (i >= 0) { _defs[i].name = s.name; _defs[i].amount = s.amount; } // keep default day/dir
   });
   budget = [..._defs, ..._rawBudget.filter(b => !_DEFAULT_IDS.has(b.id))];
 } else {
@@ -1220,9 +1221,9 @@ function renderBudget() {
 
   const todayDay = now.getDate();
   const sorted = [...items].sort((a, b) => (a.day || 31) - (b.day || 31));
-  // Split into past (already happened) and upcoming (today or later)
+  // Upcoming = day >= today (today's payments not yet received count as upcoming)
   const upcoming = sorted.filter(b => !b.day || b.day >= todayDay);
-  const past     = sorted.filter(b => b.day && b.day < todayDay);
+  const past     = sorted.filter(b =>  b.day && b.day < todayDay);
   const allRows  = [...upcoming, ...past]; // upcoming first, past greyed at bottom
 
   let runBal = openingBalance || 0;
