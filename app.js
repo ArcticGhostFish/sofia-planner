@@ -1203,23 +1203,24 @@ function renderBudget() {
     return b;
   });
 
-  let inc = 0, exp = 0, sav = 0;
-  items.forEach(b => {
-    if (b.dir === 'income') inc += b.amount;
-    else if (b.dir === 'expense') exp += b.amount;
-    else sav += b.amount;
+  let sav = 0;
+  items.forEach(b => { if (b.dir === 'saving') sav += b.amount; });
+
+  // Compute projected end-of-month balance from opening balance + all upcoming items
+  const todayDayPre = now.getDate();
+  let projBal = openingBalance || 0;
+  items.filter(b => !b.day || b.day >= todayDayPre).forEach(b => {
+    if (b.dir === 'income') projBal += b.amount; else projBal -= b.amount;
   });
 
   const biEl = document.getElementById('bi-total');
   const bbEl = document.getElementById('bb-total');
   const bsEl = document.getElementById('bs-total');
-  const beEl = document.getElementById('be-total');
-  if (biEl) biEl.textContent = '+' + fmtKr(inc);
-  if (bbEl) bbEl.textContent = fmtKr(inc - exp);
+  if (biEl) { biEl.textContent = fmtKr(openingBalance || 0); biEl.style.color = 'var(--td)'; }
+  if (bbEl) { bbEl.textContent = fmtKr(projBal); bbEl.style.color = projBal < 0 ? 'var(--rose)' : 'var(--teal-d)'; }
   if (bsEl) bsEl.textContent = fmtKr(sav);
-  if (beEl) beEl.textContent = '-' + fmtKr(exp);
 
-  const todayDay = now.getDate();
+  const todayDay = todayDayPre;
   const sorted = [...items].sort((a, b) => (a.day || 31) - (b.day || 31));
   // Upcoming = day >= today (today's payments not yet received count as upcoming)
   const upcoming = sorted.filter(b => !b.day || b.day >= todayDay);
