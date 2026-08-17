@@ -1,4 +1,151 @@
-﻿/* ===== Sofia's Life Planner – App Logic ===== */
+﻿/* ===== Planner – App Logic ===== */
+
+// ===== AUTH =====
+let currentUser = null;
+
+function plannerTokenKey(name) {
+  return 'planner_token_' + name.toLowerCase().trim();
+}
+
+function loginCheckToken(nameVal) {
+  const name = nameVal.trim();
+  const hasToken = name && Boolean(localStorage.getItem(plannerTokenKey(name)));
+  const tokenField = document.getElementById('lc-token-field');
+  const hintNew    = document.getElementById('lc-hint-new');
+  if (tokenField) tokenField.style.display = hasToken ? '' : 'none';
+  if (hintNew)    hintNew.style.display    = (!name || hasToken) ? 'none' : '';
+  if (!hasToken) {
+    const tok = document.getElementById('lc-token');
+    if (tok) tok.value = '';
+  }
+  const errEl = document.getElementById('lc-error');
+  if (errEl) errEl.style.display = 'none';
+}
+
+function handleLogin(e) {
+  e.preventDefault();
+  const name = document.getElementById('lc-name')?.value.trim();
+  if (!name) return;
+  const existing = localStorage.getItem(plannerTokenKey(name));
+  const errEl = document.getElementById('lc-error');
+
+  if (existing) {
+    const entered = document.getElementById('lc-token')?.value.trim();
+    if (entered !== existing) {
+      if (errEl) { errEl.textContent = 'Incorrect token. Check your saved token or reset your account below.'; errEl.style.display = ''; }
+      return;
+    }
+    doEnterPlanner(name);
+  } else {
+    const newToken = String(Math.floor(100000 + Math.random() * 900000));
+    localStorage.setItem(plannerTokenKey(name), newToken);
+    document.getElementById('lc-token-reveal').textContent = newToken;
+    document.getElementById('lc-reveal-welcome').textContent = 'Welcome, ' + name + '!';
+    showLoginReveal();
+  }
+}
+
+function handleConfirmToken() {
+  const name = document.getElementById('lc-name')?.value.trim();
+  doEnterPlanner(name);
+}
+
+function handleLogout() {
+  if (currentUser) _plannerSaveSnapshot(currentUser);
+  sessionStorage.removeItem('planner_session');
+  currentUser = null;
+  document.getElementById('app').style.display = 'none';
+  document.getElementById('login-screen').style.display = 'flex';
+  document.getElementById('lc-main').style.display = '';
+  document.getElementById('lc-reveal').style.display = 'none';
+  document.getElementById('lc-reset').style.display = 'none';
+  const nameEl = document.getElementById('lc-name');
+  if (nameEl) { nameEl.value = ''; }
+  loginCheckToken('');
+}
+
+function handleReset() {
+  const name = document.getElementById('lc-reset-name')?.value.trim();
+  if (!name) return;
+  localStorage.removeItem(plannerTokenKey(name));
+  document.getElementById('lc-reset-name').value = '';
+  showLoginMain();
+  const nameEl = document.getElementById('lc-name');
+  if (nameEl) nameEl.value = '';
+  loginCheckToken('');
+}
+
+function showLoginMain() {
+  document.getElementById('lc-main').style.display = '';
+  document.getElementById('lc-reveal').style.display = 'none';
+  document.getElementById('lc-reset').style.display = 'none';
+}
+
+function showLoginReveal() {
+  document.getElementById('lc-main').style.display = 'none';
+  document.getElementById('lc-reveal').style.display = '';
+  document.getElementById('lc-reset').style.display = 'none';
+}
+
+function showLoginReset() {
+  document.getElementById('lc-main').style.display = 'none';
+  document.getElementById('lc-reveal').style.display = 'none';
+  document.getElementById('lc-reset').style.display = '';
+}
+
+function _plannerSaveSnapshot(username) {
+  const snapshot = {};
+  Object.keys(localStorage).filter(k => k.startsWith('sp_'))
+    .forEach(k => { snapshot[k] = localStorage.getItem(k); });
+  localStorage.setItem('planner_snap_' + username.toLowerCase().trim(), JSON.stringify(snapshot));
+}
+
+function _plannerRestoreSnapshot(username) {
+  Object.keys(localStorage).filter(k => k.startsWith('sp_'))
+    .forEach(k => localStorage.removeItem(k));
+  const raw = localStorage.getItem('planner_snap_' + username.toLowerCase().trim());
+  if (raw) {
+    try {
+      Object.entries(JSON.parse(raw)).forEach(([k, v]) => { if (v != null) localStorage.setItem(k, v); });
+    } catch (_) {}
+  }
+}
+
+function doEnterPlanner(name) {
+  currentUser = name;
+  sessionStorage.setItem('planner_session', JSON.stringify({ name }));
+
+  const nameKey  = name.toLowerCase().trim();
+  const lastUser = localStorage.getItem('planner_last_user');
+
+  if (lastUser !== nameKey) {
+    if (lastUser) {
+      // Save outgoing user's data, load incoming user's (or fresh if new)
+      _plannerSaveSnapshot(lastUser);
+      _plannerRestoreSnapshot(name);
+      localStorage.setItem('planner_last_user', nameKey);
+      location.reload();
+      return;
+    } else {
+      // Very first login ever — preserve whatever sp_ data already exists as this user's
+      localStorage.setItem('planner_last_user', nameKey);
+    }
+  }
+
+  document.getElementById('login-screen').style.display = 'none';
+  document.getElementById('app').style.display = 'flex';
+  const _stored = S.get('profileName');
+  if (!_stored || _stored === 'Sofia Merdovic') {
+    profileName = name;
+    S.set('profileName', name);
+  } else {
+    profileName = _stored;
+  }
+  renderProfileInfo();
+  renderProfilePhoto();
+  renderSbUpcoming();
+  nav(S.get('lastView') || 'home');
+}
 
 // ===== STORAGE =====
 const S = {
@@ -8,19 +155,23 @@ const S = {
 
 // ===== STATE =====
 let notes    = S.get('notes')   || [];
-let diary    = S.get('diary')   || [{ id: 1, title: 'Wednesday feeling', date: '2026-03-04', mood: '😌', type: 'night', content: 'Today I focused on biochemistry and got through the chapter on metabolic pathways. The weather is grey but cozy outside.', grateful: 'My warm tea and a quiet morning' }];
+let diary    = S.get('diary')   || [];
 let habits   = S.get('habits')  || [{ id: 1, name: 'Drink Water', emoji: '🫗' }, { id: 2, name: 'Skincare (Morning)', emoji: '🧴' }, { id: 3, name: 'Brush Teeth', emoji: '🪥' }, { id: 4, name: 'Workout', emoji: '🏋️' }, { id: 5, name: '10.000 Steps', emoji: '🚶' }, { id: 6, name: 'Study (1 hour)', emoji: '📖' }, { id: 7, name: 'Skincare (Night)', emoji: '🌙' }, { id: 8, name: 'Read', emoji: '📚' }];
 let hChecks  = S.get('hChecks') || {};
+// Persist defaults immediately so they appear in backups
+if (!S.get('notes'))   S.set('notes',   notes);
+if (!S.get('diary'))   S.set('diary',   diary);
+if (!S.get('habits'))  S.set('habits',  habits);
+if (!S.get('hChecks')) S.set('hChecks', hChecks);
 const BUDGET_DEFAULTS = [
   {id:1, name:'Studiestöd',    amount:13804,  dir:'income',  cat:'Inkomst',       day:25},
-  {id:2, name:'Barnbidrag',    amount:1250,   dir:'income',  cat:'Inkomst',       day:20},
   {id:3, name:'Adobe',         amount:231,    dir:'expense', cat:'Prenumeration', day:10},
   {id:4, name:'Online träning',amount:550,    dir:'expense', cat:'Träning',       day:11, isEur:true},
   {id:5, name:'HBO Max',       amount:89,     dir:'expense', cat:'Prenumeration', day:17},
   {id:6, name:'Claude Pro',    amount:252.70, dir:'expense', cat:'Prenumeration', day:18},
   {id:7, name:'Storytell',     amount:139,    dir:'expense', cat:'Prenumeration', day:30},
-  {id:8, name:'ISK',           amount:300,    dir:'saving',  cat:'Sparande',      day:28},
-  {id:9, name:'Opti',          amount:300,    dir:'saving',  cat:'Sparande',      day:30},
+  {id:8, name:'ISK',  amount:1500, dir:'saving', cat:'Sparande', day:28},
+  {id:9, name:'Opti', amount:1500, dir:'saving', cat:'Sparande', day:30},
 ];
 const _rawBudget = S.get('budget');
 const _DEFAULT_IDS = new Set([1,2,3,4,5,6,7,8,9]);
@@ -34,7 +185,7 @@ if (_rawBudget && _rawBudget.length && _rawBudget[0]?.dir !== undefined) {
   });
   budget = [..._defs, ..._rawBudget.filter(b => !_DEFAULT_IDS.has(b.id))];
 } else {
-  budget = JSON.parse(JSON.stringify(BUDGET_DEFAULTS));
+  budget = [];
 }
 S.set('budget', budget);
 // photos (legacy) removed — all photos now in scrapbookPhotos
@@ -133,6 +284,13 @@ let classTranscriptions = S.get('classTranscriptions') || [];
 let activeClassId = null;
 let activeClassSection = 'notes';
 
+// Organisation Hub (Älvräddarna)
+let orgChecks        = S.get('orgChecks')        || {};
+let orgTrackerTasks  = S.get('orgTrackerTasks')  || null; // null → load defaults on first render
+let orgRecordings    = S.get('orgRecordings')    || [];
+let activeOrgMainTab = 'orientering';
+let _orgAddFormOpen  = false;
+
 // Tasks
 let tasks = S.get('tasks') || [];
 
@@ -158,15 +316,14 @@ let showArchivedClasses = false;
 let editingClassId = null;
 
 // Profile
-let profileName = S.get('profileName') || 'Sofia Merdovic';
-let profileSub  = S.get('profileSub')  || 'Life Planner';
+let profileName = S.get('profileName') || '';
+let profileSub  = S.get('profileSub')  || '';
 
-// Savings accounts (ISK, Opti, Fonder, Villahandpenning)
+// Savings accounts (ISK, Opti, Fonder)
 let savingsAccounts = S.get('savingsAccounts') || [
-  {id:1, name:'ISK',              balance:0,     monthly:300, locked:false},
-  {id:2, name:'Opti',             balance:0,     monthly:300, locked:false},
-  {id:3, name:'Fonder',           balance:5086,  monthly:0,   locked:false},
-  {id:4, name:'Villahandpenning', balance:35000, monthly:0,   locked:true},
+  {id:1, name:'ISK',    balance:0, monthly:0, locked:false},
+  {id:2, name:'Opti',   balance:0, monthly:0, locked:false},
+  {id:3, name:'Fonder', balance:0, monthly:0, locked:false},
 ];
 // Lifestyle budget: 3 000 kr/month rolling (clothes, hair, makeup)
 let lifestyleEntries = S.get('lifestyleEntries') || [];
@@ -193,7 +350,7 @@ function nav(page) {
   const navEl = document.querySelector(`.sb-item[data-view="${page}"]`);
   if (navEl) navEl.classList.add('active');
   // Persist the view so reload returns here
-  const persistable = ['home','today','journal','habits','budget','study','notes','tasks','planner','scrapbook'];
+  const persistable = ['home','today','journal','habits','budget','study','notes','tasks','planner','scrapbook','org'];
   if (persistable.includes(page)) S.set('lastView', page);
   const fns = {
     home: renderHome,
@@ -206,6 +363,7 @@ function nav(page) {
     tasks: renderTasks,
     planner: renderPlanner,
     scrapbook: renderScrapbook,
+    org: renderOrg,
   };
   if (fns[page]) fns[page]();
   // Clear unsaved journal photo attachments when leaving the journal
@@ -1209,12 +1367,11 @@ function renderBudget() {
   let sav = 0;
   items.forEach(b => { if (b.dir === 'saving') sav += b.amount; });
 
-  // Compute projected end-of-month balance from opening balance + all upcoming items
-  const todayDayPre = now.getDate();
+  // End-of-month projection = opening balance + ALL budget entries + this month's lifestyle spending
+  const curMK = y + '-' + String(m+1).padStart(2,'0');
   let projBal = openingBalance || 0;
-  items.filter(b => !b.day || b.day >= todayDayPre).forEach(b => {
-    if (b.dir === 'income') projBal += b.amount; else projBal -= b.amount;
-  });
+  items.forEach(b => { if (b.dir === 'income') projBal += b.amount; else projBal -= b.amount; });
+  lifestyleEntries.filter(e => e.month === curMK).forEach(e => { projBal -= e.amount; });
 
   const biEl = document.getElementById('bi-total');
   const bbEl = document.getElementById('bb-total');
@@ -1223,26 +1380,32 @@ function renderBudget() {
   if (bbEl) { bbEl.textContent = fmtKr(projBal); bbEl.style.color = projBal < 0 ? 'var(--rose)' : 'var(--teal-d)'; }
   if (bsEl) bsEl.textContent = fmtKr(sav);
 
-  const todayDay = todayDayPre;
-  const sorted = [...items].sort((a, b) => (a.day || 31) - (b.day || 31));
-  // Upcoming = day >= today (today's payments not yet received count as upcoming)
-  const upcoming = sorted.filter(b => !b.day || b.day >= todayDay);
-  const past     = sorted.filter(b =>  b.day && b.day < todayDay);
-  const allRows  = [...upcoming, ...past]; // upcoming first, past greyed at bottom
+  const todayDay = now.getDate();
 
+  // Merge lifestyle entries for this month into the budget rows
+  const lifestyleRows = lifestyleEntries
+    .filter(e => e.month === curMK)
+    .map(e => ({ id: 'ls_' + e.id, name: e.name, amount: e.amount, dir: 'expense', day: null, _lifestyle: true, _lsId: e.id }));
+
+  const sorted = [...items, ...lifestyleRows].sort((a, b) => (a.day || 31) - (b.day || 31));
+
+  // Running balance: only entries on or before today count as "happened"
   let runBal = openingBalance || 0;
   let hasSav = false;
 
-  const rows = allRows.map(b => {
+  const rows = sorted.map(b => {
     const isInc = b.dir === 'income', isSav = b.dir === 'saving';
-    const isPast = b.day && b.day < todayDay;
+    // Future = has a day number AND that day is after today
+    const isFuture = b.day && b.day > todayDay;
     if (isSav) hasSav = true;
-    if (!isPast) { if (isInc) runBal += b.amount; else runBal -= b.amount; }
+    // Only past/today entries update the running balance
+    if (!isFuture) { if (isInc) runBal += b.amount; else runBal -= b.amount; }
 
     const dayStr = b.day ? b.day + ':e' : '---';
     const nameStr = isSav
       ? '<span class="bud-sav-arrow-inline">&#x2192;</span> ' + escHtml(b.name)
       : escHtml(b.name);
+    const lsBadge = b._lifestyle ? ' <span class="bud-note">livsstil</span>' : '';
     const noteStr = b.note ? ' <span class="bud-note">' + escHtml(b.note) + '</span>' : '';
 
     let inCell = '---', outCell = '---';
@@ -1256,19 +1419,24 @@ function renderBudget() {
       outCell = '<span class="bud-out-amt">' + fmtKr(b.amount) + (isSav ? ' *' : '') + '</span>';
     }
 
-    const rowCls = (isPast ? 'bud-row-past' : (isInc ? 'bud-row-income' : isSav ? 'bud-row-saving' : (b.amount===0 ? 'bud-row-zero' : 'bud-row-expense')));
+    const rowCls = isFuture ? 'bud-row-future'
+      : (isInc ? 'bud-row-income' : isSav ? 'bud-row-saving' : (b.amount === 0 ? 'bud-row-zero' : 'bud-row-expense'));
     const balCls = runBal < 0 ? 'bud-bal-neg' : '';
+
+    const actHtml = b._lifestyle
+      ? '<button class="bud-act-btn bud-act-del" onclick="removeLifestyleExpense(' + b._lsId + ');renderBudget()">x</button>'
+      : '<button class="bud-act-btn" onclick="editBudget(' + b.id + ')">Edit</button>' +
+        '<button class="bud-act-btn bud-act-del" onclick="deleteBudget(' + b.id + ')">x</button>';
 
     return '<tr class="' + rowCls + '">' +
       '<td class="bud-col-day">' + dayStr + '</td>' +
-      '<td class="bud-col-name">' + nameStr + noteStr + '</td>' +
-      '<td class="bud-col-in">' + (isPast ? '' : inCell) + '</td>' +
-      '<td class="bud-col-out">' + (isPast ? '' : outCell) + '</td>' +
-      '<td class="bud-col-bal">' + (isPast ? '<span style="color:var(--tl);font-size:11px">redan betald</span>' : '<span class="' + balCls + '">' + fmtKr(runBal) + '</span>') + '</td>' +
-      '<td class="bud-col-act">' +
-        '<button class="bud-act-btn" onclick="editBudget(' + b.id + ')">Edit</button>' +
-        '<button class="bud-act-btn bud-act-del" onclick="deleteBudget(' + b.id + ')">x</button>' +
-      '</td></tr>';
+      '<td class="bud-col-name">' + nameStr + lsBadge + noteStr + '</td>' +
+      '<td class="bud-col-in">' + inCell + '</td>' +
+      '<td class="bud-col-out">' + outCell + '</td>' +
+      '<td class="bud-col-bal">' + (isFuture
+        ? '<span style="color:var(--tl);font-size:11px">kommande</span>'
+        : '<span class="' + balCls + '">' + fmtKr(runBal) + '</span>') + '</td>' +
+      '<td class="bud-col-act">' + actHtml + '</td></tr>';
   }).join('');
 
   const tfootHtml = '<tr class="bud-tfoot-row">' +
@@ -1315,7 +1483,7 @@ function renderSavingsPanel() {
 
   const total = savingsAccounts.filter(a => !a.locked).reduce((s, a) => s + a.balance, 0);
   el.innerHTML = '<div style="padding:0">' + rows +
-    '<div class="bud-sav-total"><span>Totalt sparande (exkl. villa)</span>' +
+    '<div class="bud-sav-total"><span>Totalt sparande</span>' +
     '<span style="font-weight:700;color:var(--teal-d)">' + fmtKr(total) + '</span></div></div>';
 }
 
@@ -1331,14 +1499,6 @@ function renderLifestyleBudget() {
   const now = new Date();
   const todayDay = now.getDate();
   const curMK = now.getFullYear() + '-' + String(now.getMonth()+1).padStart(2,'0');
-
-  // Only unlock after the main payday (latest income day this month)
-  const payDay = Math.max(...budget.filter(b => b.dir === 'income' && b.day).map(b => b.day));
-  if (todayDay < payDay) {
-    el.innerHTML = '<div style="padding:14px 16px;font-size:13px;color:var(--tl);text-align:center">' +
-      'Tillgänglig från <strong style="color:var(--td)">' + payDay + ':e</strong> — efter löning</div>';
-    return;
-  }
 
   let carryover = 0;
   for (let i = 3; i >= 1; i--) {
@@ -3766,15 +3926,15 @@ function renderProfileInfo() {
   const subEl  = document.getElementById('sb-profile-sub');
   if (nameEl) {
     nameEl.textContent = profileName;
-    nameEl.onblur = () => { profileName = nameEl.textContent.trim() || 'Sofia Merdovic'; S.set('profileName', profileName); };
+    nameEl.onblur = () => { profileName = nameEl.textContent.trim(); S.set('profileName', profileName); renderProfileInfo(); };
   }
   if (subEl) {
     subEl.textContent = profileSub;
-    subEl.onblur = () => { profileSub = subEl.textContent.trim() || 'Life Planner'; S.set('profileSub', profileSub); };
+    subEl.onblur = () => { profileSub = subEl.textContent.trim(); S.set('profileSub', profileSub); };
   }
   // Hero title on home page
   const heroTitle = document.querySelector('.hero-title');
-  if (heroTitle) heroTitle.textContent = profileName + "'s Life Planner";
+  if (heroTitle) heroTitle.textContent = profileName ? profileName + "'s Planner" : 'Planner';
 }
 
 // ===== SIDEBAR DATE =====
@@ -3973,16 +4133,18 @@ function deleteTask(id) {
 // ===== EXPORT / BACKUP =====
 function exportData() {
   const data = {};
-  ['notes','diary','habits','hChecks','budget','schedule','classes','classExams','classGrades',
-   'journalMoods','radioStations','widgetOrder','widgetSizes','moodboardImages','heroSizes',
-   'calManualEvents','manualGcalEvents','scrapbookPhotos','pinterestBoard','headerImages',
+  ['notes','diary','habits','hChecks','budget','savingsAccounts','openingBalance','lifestyleEntries',
+   'profileName','profileSub','schedule','schedHistory','classes','classExams','classGrades',
+   'classTranscriptions','orgChecks','orgTrackerTasks','orgRecordings',
+   'journalMoods','radioStations','widgetOrder','widgetSizes','moodboardImages',
+   'heroSizes','calManualEvents','manualGcalEvents','scrapbookPhotos','pinterestBoard','headerImages',
    'gcalClientId','profilePhoto','tasks','pomLog','darkMode'].forEach(k => {
     data[k] = S.get(k);
   });
   const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
   const a = document.createElement('a');
   a.href = URL.createObjectURL(blob);
-  a.download = `sofia-planner-backup-${new Date().toLocaleDateString('sv-SE')}.json`;
+  a.download = `planner-backup-${new Date().toLocaleDateString('sv-SE')}.json`;
   a.click();
   URL.revokeObjectURL(a.href);
 }
@@ -4030,9 +4192,20 @@ function scheduleExamNotifications() {
 // ===== INIT =====
 window.addEventListener('load', () => {
   updateSbDate();
-  renderProfilePhoto();
-  renderProfileInfo();
-  renderSbUpcoming();
+
+  // Check for existing session before showing the app
+  const _sess = sessionStorage.getItem('planner_session');
+  if (_sess) {
+    try {
+      const { name } = JSON.parse(_sess);
+      if (name && localStorage.getItem(plannerTokenKey(name))) {
+        doEnterPlanner(name);
+      } else {
+        sessionStorage.removeItem('planner_session');
+      }
+    } catch (_) { sessionStorage.removeItem('planner_session'); }
+  }
+  // If not logged in, login screen is already visible (default state in HTML)
 
   document.querySelectorAll('.sb-item[data-view]').forEach(item => {
     item.addEventListener('click', () => nav(item.dataset.view));
@@ -4117,8 +4290,7 @@ window.addEventListener('load', () => {
     }, 1000);
   }
 
-  // Restore last visited view instead of always going home
-  nav(S.get('lastView') || 'home');
+  // Nav is handled inside doEnterPlanner (called above if session exists)
 });
 
 // ===== LECTURE RECORDER =====
@@ -4453,6 +4625,619 @@ function deleteTranscription(id) {
   S.set('classTranscriptions', classTranscriptions);
   const cls = classes.find(c => c.id === activeClassId);
   if (cls) renderClassSectionBody(cls);
+}
+
+// ===== ORGANISATION HUB =====
+
+// ── Static content ────────────────────────────────────────────────────────────
+const ORG_CHECKLIST = [
+  { t: 'Teknik & infrastruktur', color: '#185FA5', items: [
+    { t: 'WP-admin-inloggning',      d: 'Begär credentials från föregående webbmaster eller ordförande' },
+    { t: 'Hosting-leverantör & login', d: 'Var hostar sajten? cPanel/Kinsta/WPEngine? Vem är kontaktperson?' },
+    { t: 'Domänregistrar & förfallodatum', d: 'alvraddarna.se — vem äger domänen och när förfalls den?' },
+    { t: 'SSL-certifikat',           d: 'Säkerställ att HTTPS är aktivt och inte snart löper ut' },
+    { t: 'Backup-rutin',             d: 'Automatisk? Frekvens? Lagringsplats? Testa faktisk återställning' },
+    { t: 'Plugin-inventering',       d: 'Redux-tema, BuddyPress (members), Ping Payments, nyhetsbrev — allt uppdaterat?' },
+    { t: 'FTP/SFTP-access',          d: 'För direkta filredigeringar vid behov — skaffa credentials' },
+  ]},
+  { t: 'Innehåll & publicering', color: '#1D9E75', items: [
+    { t: 'Redaktionell process',     d: 'Vem skriver nyheter? Vem godkänner? Vem har rätt att publicera?' },
+    { t: 'Tidningen Älvräddaren',    d: 'Hur publiceras den — PDF-länk, inbäddad, eller plugin-integration?' },
+    { t: 'Nyhetsbrev — plattform & access', d: 'Vilket system? Kontaktlistans storlek? Hur ofta skickas det?' },
+    { t: 'Sociala medier — koordinering', d: 'FB, Instagram, X, YouTube — vem driver vad och hur synkar ni?' },
+    { t: 'Faktasidor — ägarskap',    d: 'Vattenkraft, NAP, Ny lagstiftning — vem ansvarar för uppdateringar?' },
+    { t: 'Bilddatabas & mediabibliotek', d: 'Var lagras bilder? WP media library + externt arkiv?' },
+  ]},
+  { t: 'Organisation & styrelse', color: '#BA7517', items: [
+    { t: 'Definiera rollens mandat', d: 'Vad kan du göra självständigt? Vad kräver styrelsebeslut?' },
+    { t: 'Nyckelkontakter per område', d: 'Vem ringer du för nyheter, sponsorer, VattenVäktare, Östersjöns Ambassad?' },
+    { t: 'Sponsorhantering',         d: 'Tier-systemet (Huvudsponsor/Guld/Silver/Brons) — hur uppdateras profiler?' },
+    { t: 'VattenVäktare-projektet',  d: 'Förstå scope, uppdateringsbehov & vem som äger innehållet' },
+    { t: 'Östersjöns Ambassad',      d: 'Eget nav-avsnitt — vem äger innehållet och driver uppdateringarna?' },
+    { t: 'Waterkeeper Alliance-krav', d: 'Logotyp, riktlinjer, länkkrav — finns det sajt-specs från alliansen?' },
+  ]},
+];
+
+const ORG_PLAN = [
+  { t: 'Uppstart', time: 'Dag 1–30', desc: 'Orientering, access och inventering. Gör detta innan allt annat.', items: [
+    'Säkra alla credentials & inloggningar',
+    'WordPress + hosting audit — vad kör sajten egentligen?',
+    'Dokumentera nuläget (vad finns, vad saknas, vad är trasigt)',
+    'Förstå befintlig redaktionell process',
+    'Möt nyckelkontakter — lär känna förväntningarna',
+    'Sätt upp ditt planeringsavsnitt i ditt eget verktyg',
+  ]},
+  { t: 'Löpande drift', time: 'Vecka/månad', desc: 'Återkommande uppgifter — ta fram en checklista du kör på rutin.', items: [
+    'Publicera nyheter & artiklar (koordinera med skribenter)',
+    'Håll sponsortiers & profiler uppdaterade',
+    'WordPress-uppdateringar: kärna, plugins, tema',
+    'Säkerhetskontroll & prestandaövervakning',
+    'Nyhetsbrev: koordinera innehåll och utskick',
+    'Analytics: följ trafik, populärt innehåll, sökposition',
+  ]},
+  { t: 'Idébank', time: 'Rullande backlog', desc: 'Fånga allt du vill göra men inte påbörjat. En enkel lista räcker.', items: [
+    'Titel + kort beskrivning av idén',
+    'Varför? — vilket problem löser det?',
+    'Vem gagnas? (besökare / styrelse / sponsorer / media)',
+    'Komplexitet: låg / medel / hög',
+    'Beroenden: krävs andras input eller styrelsebeslut?',
+  ]},
+  { t: 'Aktiva projekt', time: 'Pågående arbete', desc: 'En rad per aktivt projekt. Håll det levande och uppdaterat.', items: [
+    'Projektnamn & tydligt mål',
+    'Status: planeras → pågår → granskning → klar',
+    'Deadline & eventuella milstolpar',
+    'Involverade parter — vem gör vad?',
+    'Blockerare & risker',
+  ]},
+  { t: 'Redaktionskalender', time: 'Kommande publiceringar', desc: 'Planera innehåll framåt i tid. Håll det enkelt och smidigt.', items: [
+    'Datum | Typ: nyhet / faktasida / nyhetsbrev / social',
+    'Ämne / rubrik (kan vara preliminär)',
+    'Ansvarig skribent eller innehållsägare',
+    'Status: utkast / granskas / klart',
+    'Länk till utkast (om relevant)',
+  ]},
+];
+
+const ORG_TRACKER_COLS   = ['idé','planeras','pågår','granskning','klar'];
+const ORG_COL_LABELS     = { idé:'Idé', planeras:'Planeras', pågår:'Pågår', granskning:'Granskning', klar:'Klar' };
+const ORG_PRI_COLORS     = { hög:'#e24b4a', medel:'#ef9f27', låg:'#639922' };
+const ORG_TAG_COLORS     = {
+  Teknik:       ['#e6f1fb','#0c447c'],
+  Uppstart:     ['#fcebeb','#791f1f'],
+  Innehåll:     ['#eaf3de','#27500a'],
+  Organisation: ['#eeedfe','#3c3489'],
+  Projekt:      ['#faeeda','#633806'],
+};
+const ORG_TRACKER_DEFAULTS = [
+  { id:1, t:'WordPress-audit',        d:'Plugins, tema, versioner, säkerhetsstatus',        col:'planeras', p:'hög',   tag:'Teknik' },
+  { id:2, t:'Säkra credentials',      d:'WP-admin, hosting, domän, FTP — handover',          col:'planeras', p:'hög',   tag:'Uppstart' },
+  { id:3, t:'Backup-verifiering',     d:'Bekräfta rutiner & testa återställning',             col:'idé',      p:'hög',   tag:'Teknik' },
+  { id:4, t:'Innehållsinventering',   d:'Hitta gammalt, trasigt eller inaktuellt innehåll',  col:'idé',      p:'medel', tag:'Innehåll' },
+  { id:5, t:'Redaktionell process',   d:'Vem skriver, godkänner och publicerar?',             col:'idé',      p:'medel', tag:'Organisation' },
+  { id:6, t:'Sponsorsidor',           d:'Verifiera att alla tiers är aktuella',               col:'idé',      p:'låg',   tag:'Innehåll' },
+  { id:7, t:'Analytics-setup',        d:'Förstå trafiken — GA4 eller WP Stats?',              col:'idé',      p:'låg',   tag:'Teknik' },
+  { id:8, t:'VattenVäktare-sidan',    d:'Scope, uppdateringsbehov, innehållsägare',           col:'idé',      p:'medel', tag:'Projekt' },
+];
+
+// ── Main render ───────────────────────────────────────────────────────────────
+function renderOrg() {
+  const el = document.getElementById('org-content-area');
+  if (!el) return;
+  if (!orgTrackerTasks) { orgTrackerTasks = JSON.parse(JSON.stringify(ORG_TRACKER_DEFAULTS)); S.set('orgTrackerTasks', orgTrackerTasks); }
+
+  const tabs = [
+    { id:'orientering',  label:'Orientering' },
+    { id:'planstruktur', label:'Planstruktur' },
+    { id:'tracker',      label:'Tracker' },
+    { id:'möten',        label:'🎙 Möten' },
+  ];
+  el.innerHTML = `
+    <div style="display:flex;gap:3px;background:var(--sbg);border-radius:10px;padding:3px;margin-bottom:20px">
+      ${tabs.map(tb => `<button class="org-main-tab ${activeOrgMainTab===tb.id?'org-main-tab-on':''}" onclick="setOrgMainTab('${tb.id}')">${tb.label}</button>`).join('')}
+    </div>
+    <div id="org-tab-body"></div>`;
+
+  renderOrgTabBody();
+}
+
+function setOrgMainTab(tab) {
+  activeOrgMainTab = tab;
+  document.querySelectorAll('.org-main-tab').forEach(b => b.classList.toggle('org-main-tab-on', b.textContent.trim().replace('🎙 ','') === tab.replace('🎙 ','')));
+  // easier: just re-render the nav pills
+  const tabs = [
+    { id:'orientering',  label:'Orientering' },
+    { id:'planstruktur', label:'Planstruktur' },
+    { id:'tracker',      label:'Tracker' },
+    { id:'möten',        label:'🎙 Möten' },
+  ];
+  const bar = document.querySelector('#org-content-area > div:first-child');
+  if (bar) bar.innerHTML = tabs.map(tb => `<button class="org-main-tab ${activeOrgMainTab===tb.id?'org-main-tab-on':''}" onclick="setOrgMainTab('${tb.id}')">${tb.label}</button>`).join('');
+  renderOrgTabBody();
+}
+
+function renderOrgTabBody() {
+  const el = document.getElementById('org-tab-body');
+  if (!el) return;
+  if      (activeOrgMainTab === 'orientering')  renderOrgOrientering(el);
+  else if (activeOrgMainTab === 'planstruktur') renderOrgPlanstruktur(el);
+  else if (activeOrgMainTab === 'tracker')      renderOrgTracker(el);
+  else if (activeOrgMainTab === 'möten')        renderOrgMöten(el);
+}
+
+// ── Orientering (onboarding checklist) ───────────────────────────────────────
+function renderOrgOrientering(el) {
+  const total = ORG_CHECKLIST.reduce((s, sec) => s + sec.items.length, 0);
+  const done  = Object.values(orgChecks).filter(Boolean).length;
+  const pct   = total > 0 ? Math.round(done / total * 100) : 0;
+
+  const sectionsHtml = ORG_CHECKLIST.map((sec, si) => {
+    const secDone = sec.items.filter((_, ii) => orgChecks[`${si}-${ii}`]).length;
+    const rows = sec.items.map((it, ii) => {
+      const key = `${si}-${ii}`;
+      const checked = !!orgChecks[key];
+      return `<div class="org-check-row" onclick="toggleOrgCheck('${key}',this)">
+        <div class="org-check-box ${checked ? 'checked' : ''}" id="orgcb-${key}">
+          ${checked ? '<span style="font-size:11px;color:#fff;line-height:1">✓</span>' : ''}
+        </div>
+        <div>
+          <div class="org-check-label ${checked ? 'done' : ''}">${escHtml(it.t)}</div>
+          <div style="font-size:12px;color:var(--tl);margin-top:2px">${escHtml(it.d)}</div>
+        </div>
+      </div>`;
+    }).join('');
+
+    return `<div class="card" style="margin-bottom:10px;overflow:hidden">
+      <details open>
+        <summary style="display:flex;justify-content:space-between;align-items:center;padding:13px 14px;border-left:3px solid ${sec.color};cursor:pointer;user-select:none;list-style:none">
+          <span style="font-weight:500;font-size:14px;color:var(--td)">${escHtml(sec.t)}</span>
+          <span style="font-size:12px;color:var(--tl);flex-shrink:0">${secDone}/${sec.items.length}</span>
+        </summary>
+        <div style="padding:0 14px 14px">${rows}</div>
+      </details>
+    </div>`;
+  }).join('');
+
+  el.innerHTML = `
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+      <div style="font-size:13px;color:var(--tl)">Klicka för att bocka av — din onboarding som webbmaster.</div>
+      <div style="font-size:13px;font-weight:500;color:var(--td)">${done}/${total}</div>
+    </div>
+    <div style="height:5px;background:var(--sbg);border-radius:3px;margin-bottom:18px;overflow:hidden">
+      <div style="height:100%;width:${pct}%;background:#1D9E75;border-radius:3px;transition:width .3s"></div>
+    </div>
+    ${sectionsHtml}`;
+}
+
+function toggleOrgCheck(key) {
+  orgChecks[key] = !orgChecks[key];
+  S.set('orgChecks', orgChecks);
+  renderOrgOrientering(document.getElementById('org-tab-body'));
+}
+
+// ── Planstruktur ──────────────────────────────────────────────────────────────
+function renderOrgPlanstruktur(el) {
+  const html = ORG_PLAN.map((sec, i) => `
+    <div class="card" style="margin-bottom:10px;overflow:hidden">
+      <details ${i === 0 ? 'open' : ''}>
+        <summary style="display:flex;justify-content:space-between;align-items:center;padding:13px 14px;border-left:3px solid #1D9E75;cursor:pointer;user-select:none;list-style:none">
+          <div style="display:flex;align-items:center;gap:10px">
+            <span style="font-weight:500;font-size:14px;color:var(--td)">${escHtml(sec.t)}</span>
+            <span style="font-size:11px;color:var(--tl)">${escHtml(sec.time)}</span>
+          </div>
+          <span style="font-size:13px;color:var(--tl)">›</span>
+        </summary>
+        <div style="padding:0 14px 14px;background:var(--sbg)">
+          <div style="font-size:12px;color:var(--tl);margin-bottom:10px;font-style:italic;padding-top:10px">${escHtml(sec.desc)}</div>
+          <ul style="padding-left:18px">${sec.items.map(it => `<li style="font-size:13px;color:var(--td);margin-bottom:5px;line-height:1.5">${escHtml(it)}</li>`).join('')}</ul>
+        </div>
+      </details>
+    </div>`).join('');
+
+  el.innerHTML = `<div style="font-size:13px;color:var(--tl);margin-bottom:16px">Rekommenderade avsnitt för att strukturera ditt webbmasterarbete.</div>${html}`;
+}
+
+// ── Tracker (Kanban) ──────────────────────────────────────────────────────────
+function renderOrgTracker(el) {
+  const showAdd = _orgAddFormOpen;
+
+  const cols = ORG_TRACKER_COLS.map(col => {
+    const cards = orgTrackerTasks.filter(t => t.col === col);
+    const cardHtml = cards.map(t => {
+      const tc = ORG_TAG_COLORS[t.tag] || ['var(--sbg)','var(--tl)'];
+      const otherCols = ORG_TRACKER_COLS.filter(c => c !== col);
+      return `<div class="org-kb-card" style="border-top:3px solid ${ORG_PRI_COLORS[t.p]}">
+        <div style="font-size:13px;font-weight:500;color:var(--td);margin-bottom:4px">${escHtml(t.t)}</div>
+        ${t.d ? `<div style="font-size:11px;color:var(--tl);margin-bottom:8px;line-height:1.4">${escHtml(t.d)}</div>` : ''}
+        <span style="font-size:10px;font-weight:500;background:${tc[0]};color:${tc[1]};border-radius:4px;padding:2px 7px;display:inline-block;margin-bottom:8px">${escHtml(t.tag)}</span>
+        <div style="display:flex;flex-wrap:wrap;gap:3px">
+          ${otherCols.map(c => `<button class="org-kb-mv" onclick="moveOrgTask(${t.id},'${c}')">→ ${ORG_COL_LABELS[c]}</button>`).join('')}
+          <button class="org-kb-mv" style="border-color:var(--rose);color:var(--rose)" onclick="deleteOrgTrackerTask(${t.id})">✕</button>
+        </div>
+      </div>`;
+    }).join('');
+
+    return `<div class="org-kb-col">
+      <div class="org-kb-colhead">${escHtml(ORG_COL_LABELS[col])} <span class="org-kb-count">${cards.length}</span></div>
+      ${cardHtml || '<div style="font-size:12px;color:var(--tl);font-style:italic;padding:6px 0">Tom</div>'}
+    </div>`;
+  }).join('');
+
+  const priLegend = Object.entries(ORG_PRI_COLORS).map(([p, c]) =>
+    `<span style="font-size:11px;color:var(--tl)"><span style="display:inline-block;width:10px;height:3px;background:${c};border-radius:1px;margin-right:4px;vertical-align:middle"></span>${p.charAt(0).toUpperCase()+p.slice(1)}</span>`
+  ).join('');
+
+  el.innerHTML = `
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
+      <div style="font-size:13px;color:var(--tl)">Flytta kort mellan kolumner.</div>
+      <button onclick="toggleOrgAddForm()" class="btn-secondary" style="font-size:13px">+ Ny uppgift</button>
+    </div>
+    ${showAdd ? `<div class="org-add-form">
+      <input id="org-ntit" class="fi" placeholder="Titel *" style="width:100%;margin-bottom:8px">
+      <input id="org-ndsc" class="fi" placeholder="Beskrivning (valfri)" style="width:100%;margin-bottom:8px">
+      <div style="display:flex;gap:8px;margin-bottom:10px">
+        <select id="org-npri" class="fi" style="flex:1">
+          <option value="hög">Hög prioritet</option>
+          <option value="medel" selected>Medel prioritet</option>
+          <option value="låg">Låg prioritet</option>
+        </select>
+        <select id="org-ntag" class="fi" style="flex:1">
+          <option>Teknik</option><option>Uppstart</option><option>Innehåll</option><option>Organisation</option><option>Projekt</option>
+        </select>
+      </div>
+      <div style="display:flex;gap:8px">
+        <button onclick="addOrgTrackerTask()" class="btn-primary" style="flex:1">Spara</button>
+        <button onclick="toggleOrgAddForm()" class="btn-secondary" style="flex:1">Avbryt</button>
+      </div>
+    </div>` : ''}
+    <div class="org-kb">${cols}</div>
+    <div style="display:flex;gap:14px;margin-top:10px;flex-wrap:wrap">${priLegend}</div>`;
+}
+
+function toggleOrgAddForm() {
+  _orgAddFormOpen = !_orgAddFormOpen;
+  renderOrgTabBody();
+}
+
+function addOrgTrackerTask() {
+  const t = document.getElementById('org-ntit')?.value.trim();
+  if (!t) return;
+  if (!orgTrackerTasks) orgTrackerTasks = [];
+  orgTrackerTasks.push({
+    id: Date.now(),
+    t,
+    d: document.getElementById('org-ndsc')?.value.trim() || '',
+    col: 'idé',
+    p: document.getElementById('org-npri')?.value || 'medel',
+    tag: document.getElementById('org-ntag')?.value || 'Projekt',
+  });
+  S.set('orgTrackerTasks', orgTrackerTasks);
+  _orgAddFormOpen = false;
+  renderOrgTabBody();
+}
+
+function moveOrgTask(id, col) {
+  const t = orgTrackerTasks.find(x => x.id === id);
+  if (t) { t.col = col; S.set('orgTrackerTasks', orgTrackerTasks); renderOrgTabBody(); }
+}
+
+function deleteOrgTrackerTask(id) {
+  orgTrackerTasks = orgTrackerTasks.filter(t => t.id !== id);
+  S.set('orgTrackerTasks', orgTrackerTasks);
+  renderOrgTabBody();
+}
+
+// ── Möten (integrated transcriber) ───────────────────────────────────────────
+function renderOrgMöten(el) {
+  el.innerHTML = buildOrgRecorder();
+}
+
+// ── Org Recorder ──────────────────────────────────────────────────────────────
+let _orgRecTranscript = '';
+let _orgRecMediaRecorder = null;
+let _orgRecChunks = [];
+let _orgRecTimerInterval = null;
+
+function buildOrgRecorder() {
+  const recs = [...orgRecordings].sort((a, b) => b.date.localeCompare(a.date));
+
+  const recList = recs.length ? recs.map(r => `
+    <div class="rec-card">
+      <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:8px;margin-bottom:8px">
+        <div>
+          <div style="font-weight:600;font-size:14px;color:var(--td)">${escHtml(r.date)}</div>
+          ${r.label ? `<div style="font-size:12px;color:var(--tl);margin-top:2px">${escHtml(r.label)}</div>` : ''}
+        </div>
+        <button onclick="deleteOrgRecording(${r.id})" style="background:none;border:none;color:var(--tl);cursor:pointer;font-size:13px;flex-shrink:0">✕</button>
+      </div>
+      <details style="margin-top:8px">
+        <summary style="font-size:12px;color:var(--tl);cursor:pointer;user-select:none">Visa transkription</summary>
+        <div style="font-size:13px;color:var(--td);margin-top:8px;line-height:1.6;white-space:pre-wrap">${escHtml(r.transcript)}</div>
+      </details>
+    </div>`).join('')
+    : '<div style="color:var(--tl);font-style:italic;font-size:14px;padding:8px 0">Inga inspelningar sparade än.</div>';
+
+  const savedAai = S.get('sp_aai_key') || '';
+
+  return `
+    <div class="rec-wrap">
+      <div class="card" style="margin-bottom:20px">
+        <details style="margin-bottom:16px">
+          <summary style="font-size:13px;font-weight:600;color:var(--tl);cursor:pointer;user-select:none">🔑 AssemblyAI Key ${savedAai ? '(saved ✓)' : '(required)'}</summary>
+          <div style="margin-top:10px">
+            <input type="password" id="org-rec-aai-key" value="${escHtml(savedAai)}" placeholder="Paste your AssemblyAI key..."
+              style="width:100%;border:1px solid var(--border);border-radius:6px;padding:6px 10px;font-size:13px;background:var(--cream);color:var(--td);box-sizing:border-box"
+              onchange="S.set('sp_aai_key', this.value.trim())">
+          </div>
+        </details>
+        <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px;flex-wrap:wrap">
+          <label style="font-size:13px;color:var(--tl);white-space:nowrap">Språk:</label>
+          <select id="org-rec-lang-sel" style="border:1px solid var(--border);border-radius:6px;padding:4px 10px;font-size:13px;background:var(--cream);color:var(--td);cursor:pointer">
+            <option value="sv">Svenska</option>
+            <option value="en">English</option>
+          </select>
+          <input id="org-rec-label" class="fi" placeholder="Mötesetikett (valfri)" style="flex:1;min-width:160px">
+        </div>
+        <div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:14px">
+          <label class="rec-upload-btn">
+            📎 Upload Audio File
+            <input type="file" accept="audio/*" style="display:none" onchange="orgRecHandleFile(event)">
+          </label>
+          <button id="org-rec-live-btn" class="rec-upload-btn" style="border-color:var(--rose);color:var(--rose)" onclick="orgRecStartLive()">
+            🔊 Record Live Audio
+          </button>
+        </div>
+        <div id="org-rec-status" style="font-size:13px;color:var(--tl);margin-top:10px;min-height:20px"></div>
+        <div id="org-rec-timer" style="display:none;font-size:22px;font-weight:700;color:var(--rose);margin:10px 0;letter-spacing:.05em">00:00</div>
+        <button id="org-rec-stop-btn" style="display:none;width:100%;margin-top:8px" class="btn-primary" onclick="orgRecStopLive()">⬛ Stop & Transcribe</button>
+        <div id="org-rec-analysis-box" style="display:none;margin-top:14px;border-top:1px solid var(--border);padding-top:14px">
+          <div id="org-rec-analysis-content"></div>
+          <div style="display:flex;gap:8px;margin-top:14px;flex-wrap:wrap">
+            <button onclick="orgRecSave()" class="btn-primary">Spara transkription</button>
+            <button onclick="orgRecCopyAndAnalyze()" class="btn-secondary" style="background:var(--teal);color:#fff;border-color:var(--teal)">📋 Copy & Open Claude.ai</button>
+            <button onclick="orgRecDiscard()" class="btn-secondary">Discard</button>
+          </div>
+        </div>
+      </div>
+      <div class="section-header" style="margin-bottom:12px">Sparade inspelningar</div>
+      ${recList}
+    </div>`;
+}
+
+async function orgRecHandleFile(event) {
+  const file = event.target.files[0];
+  if (!file) return;
+  _orgRecTranscript = '';
+
+  const status = document.getElementById('org-rec-status');
+  const analysisBox = document.getElementById('org-rec-analysis-box');
+  const analysisContent = document.getElementById('org-rec-analysis-content');
+
+  status.textContent = `Uploading "${file.name}"...`;
+  analysisBox.style.display = 'none';
+
+  try {
+    const aaiInput = document.getElementById('org-rec-aai-key');
+    let aaiKey = (aaiInput ? aaiInput.value.trim() : '') || S.get('sp_aai_key') || '';
+    if (!aaiKey) { status.textContent = 'AssemblyAI key missing — open the 🔑 section above.'; return; }
+    S.set('sp_aai_key', aaiKey);
+
+    const uploadRes = await fetch('https://api.assemblyai.com/v2/upload', {
+      method: 'POST',
+      headers: { authorization: aaiKey, 'content-type': 'application/octet-stream' },
+      body: file
+    });
+    if (!uploadRes.ok) throw new Error('Upload failed: ' + uploadRes.status);
+    const { upload_url } = await uploadRes.json();
+
+    const langSel = document.getElementById('org-rec-lang-sel');
+    const lang = langSel ? langSel.value : 'sv';
+    const txRes = await fetch('https://api.assemblyai.com/v2/transcript', {
+      method: 'POST',
+      headers: { authorization: aaiKey, 'content-type': 'application/json' },
+      body: JSON.stringify({ audio_url: upload_url, language_code: lang, speech_models: ['universal-2'] })
+    });
+    if (!txRes.ok) throw new Error('Transcription request failed: ' + txRes.status);
+    const { id } = await txRes.json();
+
+    status.textContent = 'Transkriberar... detta kan ta en stund.';
+    let transcript = '';
+    while (true) {
+      await new Promise(r => setTimeout(r, 3000));
+      const pollRes = await fetch(`https://api.assemblyai.com/v2/transcript/${id}`, { headers: { authorization: aaiKey } });
+      const pollData = await pollRes.json();
+      if (pollData.status === 'completed') { transcript = pollData.text; break; }
+      if (pollData.status === 'error') throw new Error('Transcription error: ' + pollData.error);
+    }
+
+    _orgRecTranscript = transcript;
+    status.textContent = 'Klart — spara eller kopiera till Claude.ai.';
+    analysisBox.style.display = 'block';
+    analysisContent.innerHTML = `<div class="rec-text" style="white-space:pre-wrap;max-height:180px;overflow-y:auto">${escHtml(transcript)}</div>`;
+
+  } catch (err) {
+    status.textContent = 'Error: ' + err.message;
+  }
+}
+
+async function orgRecStartLive() {
+  _orgRecChunks = [];
+
+  const status = document.getElementById('org-rec-status');
+  const timer = document.getElementById('org-rec-timer');
+  const stopBtn = document.getElementById('org-rec-stop-btn');
+  const liveBtn = document.getElementById('org-rec-live-btn');
+  const analysisBox = document.getElementById('org-rec-analysis-box');
+
+  const confirmed = await new Promise(resolve => {
+    const overlay = document.createElement('div');
+    overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:9999;display:flex;align-items:center;justify-content:center';
+    overlay.innerHTML = `
+      <div style="background:var(--cream);border-radius:16px;padding:28px 32px;max-width:400px;width:90%;box-shadow:0 8px 40px rgba(0,0,0,.25)">
+        <div style="font-size:18px;font-weight:700;color:var(--teal-d);margin-bottom:14px">Innan dialogen öppnas</div>
+        <p style="font-size:14px;line-height:1.6;color:#555;margin:0 0 10px">I Chromes delningsdialog:</p>
+        <ol style="font-size:14px;line-height:1.9;color:#444;margin:0 0 18px;padding-left:20px">
+          <li>Klicka på fliken <strong>Hela skärmen</strong></li>
+          <li>Markera ✅ <strong>"Dela systemljud"</strong> längst ned</li>
+          <li>Klicka <strong>Dela</strong></li>
+        </ol>
+        <div style="display:flex;gap:10px">
+          <button style="flex:1;padding:10px;background:var(--teal);color:#fff;border:none;border-radius:8px;font-size:14px;cursor:pointer;font-weight:600">Öppna dialog</button>
+          <button style="flex:1;padding:10px;background:none;border:1px solid var(--border);border-radius:8px;font-size:14px;cursor:pointer;color:#666">Avbryt</button>
+        </div>
+      </div>`;
+    overlay.__resolve = resolve;
+    document.body.appendChild(overlay);
+    overlay.querySelector('button:last-child').onclick = () => { document.body.removeChild(overlay); resolve(false); };
+    overlay.querySelector('button:first-child').onclick = () => { document.body.removeChild(overlay); resolve(true); };
+  });
+
+  if (!confirmed) return;
+
+  try {
+    const stream = await navigator.mediaDevices.getDisplayMedia({
+      video: { width: 1, height: 1 },
+      audio: { echoCancellation: false, noiseSuppression: false }
+    });
+
+    if (!stream.getAudioTracks().length) {
+      stream.getTracks().forEach(t => t.stop());
+      if (status) status.innerHTML = '⚠️ Inget ljud fångades. Valde du <strong>Hela skärmen</strong> och markerade <strong>Dela systemljud</strong>?';
+      return;
+    }
+
+    const audioStream = new MediaStream(stream.getAudioTracks());
+    _orgRecMediaRecorder = new MediaRecorder(audioStream);
+    _orgRecMediaRecorder._fullStream = stream;
+    _orgRecMediaRecorder.ondataavailable = e => { if (e.data.size > 0) _orgRecChunks.push(e.data); };
+    _orgRecMediaRecorder.onstop = () => orgRecProcessLive();
+    _orgRecMediaRecorder.start(1000);
+
+    let secs = 0;
+    if (_orgRecTimerInterval) clearInterval(_orgRecTimerInterval);
+    _orgRecTimerInterval = setInterval(() => {
+      secs++;
+      const mm = String(Math.floor(secs / 60)).padStart(2, '0');
+      const ss = String(secs % 60).padStart(2, '0');
+      if (timer) timer.textContent = `${mm}:${ss}`;
+    }, 1000);
+
+    if (status) status.textContent = 'Spelar in — starta ditt möte/video nu.';
+    if (timer) timer.style.display = 'block';
+    if (stopBtn) stopBtn.style.display = 'block';
+    if (liveBtn) liveBtn.style.display = 'none';
+    if (analysisBox) analysisBox.style.display = 'none';
+
+    stream.getAudioTracks()[0].onended = () => orgRecStopLive();
+
+  } catch (e) {
+    if (status) status.textContent = e.name === 'NotAllowedError' ? 'Tillstånd nekat.' : 'Error: ' + e.message;
+  }
+}
+
+function orgRecStopLive() {
+  if (_orgRecTimerInterval) { clearInterval(_orgRecTimerInterval); _orgRecTimerInterval = null; }
+  const timer = document.getElementById('org-rec-timer');
+  const stopBtn = document.getElementById('org-rec-stop-btn');
+  const liveBtn = document.getElementById('org-rec-live-btn');
+  if (timer) timer.style.display = 'none';
+  if (stopBtn) stopBtn.style.display = 'none';
+  if (liveBtn) liveBtn.style.display = 'inline-flex';
+  if (_orgRecMediaRecorder && _orgRecMediaRecorder.state !== 'inactive') {
+    _orgRecMediaRecorder.stop();
+    if (_orgRecMediaRecorder._fullStream) _orgRecMediaRecorder._fullStream.getTracks().forEach(t => t.stop());
+    _orgRecMediaRecorder.stream.getTracks().forEach(t => t.stop());
+  }
+}
+
+async function orgRecProcessLive() {
+  const status = document.getElementById('org-rec-status');
+  const analysisBox = document.getElementById('org-rec-analysis-box');
+  const analysisContent = document.getElementById('org-rec-analysis-content');
+
+  if (!_orgRecChunks.length) { if (status) status.textContent = 'Inget ljud inspelat.'; return; }
+
+  try {
+    const aaiInput = document.getElementById('org-rec-aai-key');
+    let aaiKey = (aaiInput ? aaiInput.value.trim() : '') || S.get('sp_aai_key') || '';
+    if (!aaiKey) { if (status) status.textContent = 'AssemblyAI key saknas.'; return; }
+    S.set('sp_aai_key', aaiKey);
+
+    if (status) status.textContent = 'Laddar upp inspelning...';
+    const blob = new Blob(_orgRecChunks, { type: 'audio/webm' });
+    const uploadRes = await fetch('https://api.assemblyai.com/v2/upload', {
+      method: 'POST',
+      headers: { authorization: aaiKey },
+      body: blob
+    });
+    if (!uploadRes.ok) throw new Error('Upload failed: ' + uploadRes.status);
+    const { upload_url } = await uploadRes.json();
+
+    const langSel = document.getElementById('org-rec-lang-sel');
+    const lang = langSel ? langSel.value : 'sv';
+    if (status) status.textContent = 'Transkriberar...';
+    const txRes = await fetch('https://api.assemblyai.com/v2/transcript', {
+      method: 'POST',
+      headers: { authorization: aaiKey, 'content-type': 'application/json' },
+      body: JSON.stringify({ audio_url: upload_url, language_code: lang, speech_models: ['universal-2'] })
+    });
+    if (!txRes.ok) throw new Error('Request failed: ' + txRes.status);
+    const { id } = await txRes.json();
+
+    while (true) {
+      await new Promise(r => setTimeout(r, 3000));
+      const poll = await fetch(`https://api.assemblyai.com/v2/transcript/${id}`, { headers: { authorization: aaiKey } });
+      const data = await poll.json();
+      if (data.status === 'completed') { _orgRecTranscript = data.text || ''; break; }
+      if (data.status === 'error') throw new Error(data.error);
+    }
+
+    if (!_orgRecTranscript) { if (status) status.textContent = 'Inget tal hittades.'; return; }
+
+    if (status) status.textContent = 'Klart — spara eller kopiera till Claude.ai.';
+    if (analysisBox) analysisBox.style.display = 'block';
+    if (analysisContent) analysisContent.innerHTML = `<div class="rec-text" style="white-space:pre-wrap;max-height:180px;overflow-y:auto">${escHtml(_orgRecTranscript)}</div>`;
+
+  } catch (err) {
+    if (status) status.textContent = 'Error: ' + err.message;
+  }
+}
+
+function orgRecCopyAndAnalyze() {
+  if (!_orgRecTranscript) return;
+  const prompt = `You are helping summarize a meeting for the Swedish environmental organization Älvräddarna, which works to protect rivers and advocate for dam removal. Analyze this meeting transcript and provide:\n\n1. **Sammanfattning** — Concise summary of what was discussed and decided (in Swedish).\n2. **Åtgärdspunkter** — Action items and next steps as a bullet list (in Swedish).\n3. **Key Takeaways** — Most important points in English as a bullet list.\n\nTranscript:\n"""\n${_orgRecTranscript}\n"""`;
+  navigator.clipboard.writeText(prompt).then(() => {
+    window.open('https://claude.ai', '_blank');
+    const status = document.getElementById('org-rec-status');
+    if (status) status.textContent = 'Kopierat! Klistra in (Ctrl+V) i Claude.ai.';
+  }).catch(() => {
+    const status = document.getElementById('org-rec-status');
+    if (status) status.textContent = 'Kunde inte kopiera — markera texten ovan manuellt.';
+  });
+}
+
+function orgRecSave() {
+  const labelEl = document.getElementById('org-rec-label');
+  orgRecordings.push({
+    id: Date.now(),
+    date: new Date().toLocaleDateString('sv-SE'),
+    transcript: _orgRecTranscript,
+    label: labelEl ? labelEl.value.trim() : ''
+  });
+  S.set('orgRecordings', orgRecordings);
+  _orgRecTranscript = '';
+  renderOrgMöten(document.getElementById('org-tab-body'));
+}
+
+function orgRecDiscard() {
+  _orgRecTranscript = '';
+  renderOrgMöten(document.getElementById('org-tab-body'));
+}
+
+function deleteOrgRecording(id) {
+  if (!confirm('Ta bort den här inspelningen?')) return;
+  orgRecordings = orgRecordings.filter(r => r.id !== id);
+  S.set('orgRecordings', orgRecordings);
+  renderOrgMöten(document.getElementById('org-tab-body'));
 }
 
 // ===== AI STUDY PLANNER =====
